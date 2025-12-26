@@ -120,7 +120,7 @@ class EnchantmentSoulbound(
 
             val items = itemStrings.map { Items.fromSNBT(it) }
 
-            plugin.scheduler.run {
+            player.scheduler.run {
                 DropQueue(player)
                     .addItems(items)
                     .forceTelekinesis()

@@ -80,7 +80,7 @@ class AnvilSupport(
 
         antiRepeat.add(player.uniqueId)
 
-        this.plugin.scheduler.run {
+        player.scheduler.run {
             antiRepeat.remove(player.uniqueId)
 
             val left = event.inventory.getItem(0)?.clone()

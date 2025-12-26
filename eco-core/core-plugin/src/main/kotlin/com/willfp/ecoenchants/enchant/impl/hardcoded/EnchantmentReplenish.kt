@@ -97,7 +97,7 @@ class EnchantmentReplenish(
 
             data.age = 0
 
-            plugin.scheduler.run {
+            Bukkit.getRegionScheduler().run(this.plugin, block.location) {
                 block.type = type
                 block.blockData = data
 

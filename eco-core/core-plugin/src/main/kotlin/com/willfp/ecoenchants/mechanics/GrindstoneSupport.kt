@@ -23,7 +23,7 @@ class GrindstoneSupport(
         val inventory = event.view.topInventory as? GrindstoneInventory ?: return
 
         // Run everything later to await event completion
-        plugin.scheduler.run {
+        event.player.scheduler.run {
             val topEnchants = inventory.getItem(0)?.fast()?.getEnchants(true) ?: emptyMap()
             val bottomEnchants = inventory.getItem(1)?.fast()?.getEnchants(true) ?: emptyMap()
 
@@ -95,15 +95,20 @@ class GrindstoneSupport(
         }
 
         // Force remove XP
-        plugin.scheduler.runLater(1) {
-            val loc = inventory.location
+        event.player.scheduler.runDelayed (
+            this.plugin,
+            {
+                val loc = inventory.location
 
-            val orbs = loc?.getNearbyEntities(3.0, 3.0, 3.0)
-                ?: emptyList()
+                val orbs = loc?.getNearbyEntities(3.0, 3.0, 3.0)
+                    ?: emptyList()
 
-            for (orb in orbs.filterIsInstance<ExperienceOrb>()) {
-                orb.remove()
-            }
-        }
+                for (orb in orbs.filterIsInstance<ExperienceOrb>()) {
+                    orb.remove()
+                }
+            },
+            {},
+            1
+        )
     }
 }

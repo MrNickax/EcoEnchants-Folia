@@ -17,9 +17,12 @@ class EnchantmentRepairing(
     override fun onRegister() {
         val frequency = config.getInt("frequency").toLong()
 
-        plugin.scheduler.runTimer(frequency, frequency) {
-            handleRepairing()
-        }
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(
+            this.plugin,
+            { handleRepairing() },
+            frequency,
+            frequency
+        )
     }
 
     private fun handleRepairing() {
