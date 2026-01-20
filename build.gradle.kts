@@ -42,6 +42,8 @@ allprojects {
         maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
         maven("https://repo.codemc.org/repository/nms/")
         maven("https://repo.essentialsx.net/releases/")
+        maven("https://oss.sonatype.org/content/repositories/snapshots/")
+        maven("https://s01.oss.sonatype.org/content/repositories/snapshots/")
 
         maven("https://jitpack.io") {
             content { includeGroupByRegex("com\\.github\\..*") }
