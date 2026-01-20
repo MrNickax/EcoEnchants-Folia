@@ -1,6 +1,7 @@
 pluginManagement {
     repositories {
         maven("https://repo.papermc.io/repository/maven-public/")
+        maven("https://oss.sonatype.org/content/repositories/snapshots/")
         gradlePluginPortal()
         mavenLocal()
         maven("https://repo.auxilor.io/repository/maven-public/")
@@ -23,3 +24,4 @@ include(":eco-core:core-nms:v1_21_6")
 include(":eco-core:core-nms:v1_21_7")
 include(":eco-core:core-nms:v1_21_8")
 include(":eco-core:core-nms:v1_21_10")
+include(":eco-core:core-nms:v1_21_11")
