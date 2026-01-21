@@ -1,4 +1,3 @@
-
 package com.willfp.ecoenchants.proxy.v1_21_11
 
 import com.willfp.ecoenchants.enchant.EcoEnchant
@@ -21,12 +20,16 @@ import org.bukkit.craftbukkit.CraftRegistry
 import org.bukkit.craftbukkit.CraftServer
 import org.bukkit.craftbukkit.enchantments.CraftEnchantment
 import org.bukkit.craftbukkit.util.CraftNamespacedKey
-import java.util.*
-import java.util.function.BiFunction
 import org.bukkit.enchantments.Enchantment as BukkitEnchantment
+import java.lang.reflect.Modifier
+import java.util.IdentityHashMap
+import java.util.function.BiFunction
 
 private val enchantmentRegistry =
-    (Bukkit.getServer() as CraftServer).server.registryAccess().lookupOrThrow(Registries.ENCHANTMENT) as MappedRegistry<Enchantment>
+    (Bukkit.getServer() as CraftServer)
+        .server
+        .registryAccess()
+        .lookupOrThrow(Registries.ENCHANTMENT) as MappedRegistry<Enchantment>
 
 @Suppress("DEPRECATION")
 private val bukkitRegistry: org.bukkit.Registry<BukkitEnchantment>
@@ -34,6 +37,10 @@ private val bukkitRegistry: org.bukkit.Registry<BukkitEnchantment>
         (org.bukkit.Registry.ENCHANTMENT as DelayedRegistry<BukkitEnchantment, *>).delegate()
 
 class ModernEnchantmentRegisterer : ModernEnchantmentRegistererProxy {
+
+    /* ==============================
+       Bukkit registry reflection
+       ============================== */
 
     private val minecraftToBukkit = CraftRegistry::class.java
         .getDeclaredField("minecraftToBukkit")
@@ -43,105 +50,167 @@ class ModernEnchantmentRegisterer : ModernEnchantmentRegistererProxy {
         .getDeclaredField("cache")
         .apply { isAccessible = true }
 
+    /* ==============================
+       MappedRegistry reflection
+       ============================== */
+
+    private val frozenField = MappedRegistry::class.java
+        .declaredFields.first { it.type == Boolean::class.javaPrimitiveType }
+        .apply { isAccessible = true }
+
+    private val allTagsField = MappedRegistry::class.java
+        .declaredFields.first { it.type.name.contains("TagSet") }
+        .apply { isAccessible = true }
+
+    private val frozenTagsField = MappedRegistry::class.java
+        .declaredFields.first {
+            Map::class.java.isAssignableFrom(it.type) &&
+                    it.name.contains("frozen", ignoreCase = true)
+        }
+        .apply { isAccessible = true }
+
+    private val unregisteredIntrusiveHoldersField = MappedRegistry::class.java
+        .declaredFields.first {
+            Map::class.java.isAssignableFrom(it.type) &&
+                    it.name.contains("unregistered", ignoreCase = true)
+        }
+        .apply { isAccessible = true }
+
+    /* ==============================
+       Registry replacement
+       ============================== */
+
     override fun replaceRegistry() {
         val newRegistryMTB =
             BiFunction<NamespacedKey, Enchantment, BukkitEnchantment?> { key, _ ->
                 val eco = EcoEnchants.getByID(key.key)
-                val isRegistered = enchantmentRegistry.containsKey(CraftNamespacedKey.toMinecraft(key))
+                val isRegistered = enchantmentRegistry.containsKey(
+                    CraftNamespacedKey.toMinecraft(key)
+                )
 
-                if (eco != null) {
-                    eco as BukkitEnchantment
-                } else if (isRegistered) {
-                    val holder = enchantmentRegistry.get(CraftNamespacedKey.toMinecraft(key)).get()
-                    CraftEnchantment(holder)
-                } else {
-                    null
+                when {
+                    eco != null -> eco as BukkitEnchantment
+                    isRegistered -> {
+                        val holder = enchantmentRegistry
+                            .get(CraftNamespacedKey.toMinecraft(key))
+                            .get()
+                        CraftEnchantment(holder)
+                    }
+                    else -> null
                 }
             }
 
-        // Update bukkit registry
         @Suppress("UNCHECKED_CAST")
         minecraftToBukkit.set(
             bukkitRegistry,
-            RegistryTypeMapper(newRegistryMTB as BiFunction<NamespacedKey, Enchantment, BukkitEnchantment>)
+            RegistryTypeMapper(
+                newRegistryMTB as BiFunction<NamespacedKey, Enchantment, BukkitEnchantment>
+            )
         )
 
-        // Clear the enchantment cache
-        cache.set(bukkitRegistry, mutableMapOf<NamespacedKey, BukkitEnchantment>())
+        cache.set(
+            bukkitRegistry,
+            mutableMapOf<NamespacedKey, BukkitEnchantment>()
+        )
+    }
+
+    /* ==============================
+       Freeze / Unfreeze (EE-style)
+       ============================== */
+
+    private fun unfreezeRegistry() {
+        frozenField.setBoolean(enchantmentRegistry, false)
+
+        unregisteredIntrusiveHoldersField.set(
+            enchantmentRegistry,
+            IdentityHashMap<Enchantment, Holder.Reference<Enchantment>>()
+        )
     }
 
     override fun freezeRegistry() {
-        try {
-            enchantmentRegistry.freeze()
-        } catch (_: Exception) {
-            // Ignore if already frozen
+        val originalTagSet = allTagsField.get(enchantmentRegistry)
+        val frozenTags =
+            frozenTagsField.get(enchantmentRegistry) as MutableMap<Any?, Any?>
+
+        // Extraer el mapa interno del TagSet original
+        val tagMapField = originalTagSet.javaClass.declaredFields
+            .first { Map::class.java.isAssignableFrom(it.type) }
+            .apply { isAccessible = true }
+
+        val tagsMap = HashMap(tagMapField.get(originalTagSet) as Map<Any?, Any?>)
+
+        // Asegurar consistencia
+        tagsMap.forEach { (k, v) ->
+            frozenTags.putIfAbsent(k, v)
         }
+
+        // Unbound (temporal)
+        unboundTags()
+
+        // Freeze vanilla
+        enchantmentRegistry.freeze()
+
+        // Restaurar tags custom
+        frozenTags.forEach { (k, v) ->
+            tagsMap.putIfAbsent(k, v)
+        }
+
+        // Restaurar TagSet original
+        tagMapField.set(originalTagSet, tagsMap)
+        allTagsField.set(enchantmentRegistry, originalTagSet)
     }
 
-    override fun register(enchant: EcoEnchantBase): BukkitEnchantment {
-        // Clear the enchantment cache
-        cache.set(bukkitRegistry, mutableMapOf<NamespacedKey, BukkitEnchantment>())
+    private fun unboundTags() {
+        val tagSetClass = MappedRegistry::class.java
+            .declaredClasses
+            .first { it.simpleName.contains("TagSet") }
 
-        if (enchantmentRegistry.containsKey(CraftNamespacedKey.toMinecraft(enchant.enchantmentKey))) {
-            val nms = enchantmentRegistry[CraftNamespacedKey.toMinecraft(enchant.enchantmentKey)]
-
-            if (nms.isPresent) {
-                return EcoEnchantsCraftEnchantment(enchant, nms.get())
-            } else {
-                throw IllegalStateException("Enchantment ${enchant.id} wasn't registered")
+        val factoryMethod = tagSetClass.declaredMethods
+            .first {
+                Modifier.isStatic(it.modifiers) &&
+                        it.parameterCount == 0
             }
+            .apply { isAccessible = true }
+
+        val unboundTagSet = factoryMethod.invoke(null)
+
+        allTagsField.set(enchantmentRegistry, unboundTagSet)
+    }
+
+
+
+    /* ==============================
+       Registration
+       ============================== */
+
+    override fun register(enchant: EcoEnchantBase): BukkitEnchantment {
+        cache.set(
+            bukkitRegistry,
+            mutableMapOf<NamespacedKey, BukkitEnchantment>()
+        )
+
+        val key = CraftNamespacedKey.toMinecraft(enchant.enchantmentKey)
+
+        if (enchantmentRegistry.containsKey(key)) {
+            val holder = enchantmentRegistry[key].orElseThrow()
+            return EcoEnchantsCraftEnchantment(enchant, holder)
         }
 
-        // MUST unfreeze before creating an intrusive holder
         unfreezeRegistry()
 
-        val vanillaEnchantment = vanillaEcoEnchantsEnchantment(enchant)
+        val vanilla = vanillaEcoEnchantsEnchantment(enchant)
+        val reference = enchantmentRegistry.createIntrusiveHolder(vanilla)
 
-        // Create a new Holder for the custom enchantment
-        val reference = enchantmentRegistry.createIntrusiveHolder(vanillaEnchantment)
-
-        // Add it into Registry
         Registry.register(
             enchantmentRegistry,
             Identifier.withDefaultNamespace(enchant.id),
-            vanillaEnchantment
+            vanilla
         )
 
-        // Return wrapped in EcoEnchantsCraftEnchantment
         return EcoEnchantsCraftEnchantment(enchant, reference)
     }
 
     override fun unregister(enchant: EcoEnchant) {
-        /*
-        You can't unregister from a minecraft registry, so we simply leave the stale reference there.
-        This shouldn't cause many issues in production as the bukkit registry is replaced on each reload.
-         */
-    }
-
-    private fun unfreezeRegistry() {
-        try {
-            // Get all fields and find the frozen field (boolean type)
-            val fields = enchantmentRegistry.javaClass.declaredFields
-            val frozenField = fields.find { field ->
-                field.type == Boolean::class.javaPrimitiveType
-            }
-
-            if (frozenField != null) {
-                frozenField.isAccessible = true
-                frozenField.setBoolean(enchantmentRegistry, false)
-            }
-
-            // Also clear unregistered intrusive holders
-            val unregisteredField = fields.find { field ->
-                field.type == Map::class.java && field.name.contains("unregistered", ignoreCase = true)
-            }
-
-            if (unregisteredField != null) {
-                unregisteredField.isAccessible = true
-                unregisteredField.set(enchantmentRegistry, IdentityHashMap<Enchantment, Holder.Reference<Enchantment>>())
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        // Igual que EcoEnchants original: no-op
     }
 }
