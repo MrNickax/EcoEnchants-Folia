@@ -1,7 +1,6 @@
 package com.willfp.ecoenchants.enchant
 
 import com.github.benmanes.caffeine.cache.Caffeine
-import com.willfp.eco.core.Prerequisite
 import com.willfp.eco.core.config.base.LangYml
 import com.willfp.eco.core.drops.DropQueue
 import com.willfp.eco.core.fast.fast
@@ -20,7 +19,6 @@ import com.willfp.eco.core.items.Items
 import com.willfp.eco.core.items.builder.EnchantedBookBuilder
 import com.willfp.eco.core.items.builder.ItemStackBuilder
 import com.willfp.eco.core.items.isEcoEmpty
-import com.willfp.eco.core.items.isEmpty
 import com.willfp.eco.util.formatEco
 import com.willfp.eco.util.lineWrap
 import com.willfp.ecoenchants.EcoEnchantsPlugin
@@ -36,6 +34,7 @@ import org.bukkit.inventory.ItemStack
 import kotlin.math.ceil
 
 object EnchantGUI {
+
     private lateinit var menu: Menu
     private val enchantInfoMenus = Caffeine.newBuilder().build<EcoEnchant, Menu>()
 
@@ -103,7 +102,7 @@ object EnchantGUI {
                 pane
             )
 
-            for (direction in PageChanger.Direction.values()) {
+            for (direction in PageChanger.Direction.entries) {
                 val directionName = direction.name.lowercase()
 
                 addComponent(
@@ -187,7 +186,7 @@ private class EnchantmentScrollPane(
 ) : GUIComponent {
     private val defaultSlot = slot(Items.lookup(plugin.configYml.getString("enchant-gui.empty-item")))
 
-    override fun getSlotAt(row: Int, column: Int, player: Player, menu: Menu): Slot? {
+    override fun getSlotAt(row: Int, column: Int, player: Player, menu: Menu): Slot {
         val index = column + ((row - 1) * columns) - 1
         val page = menu.getPage(player)
 
@@ -210,57 +209,57 @@ private class EnchantmentScrollPane(
 private val cachedEnchantmentSlots = Caffeine.newBuilder()
     .build<EcoEnchant, Slot>()
 
-private fun EcoEnchant.getInformationSlot(plugin: EcoEnchantsPlugin, player: Player): Slot {
-    return cachedEnchantmentSlots.get(this) { it ->
-        val level = if (plugin.configYml.getBool("enchantinfo.item.show-max-level")) {
-            it.maximumLevel
-        } else {
-            1
-        }
+        private fun EcoEnchant.getInformationSlot(plugin: EcoEnchantsPlugin, player: Player): Slot {
+            return cachedEnchantmentSlots.get(this) { it ->
+                val level = if (plugin.configYml.getBool("enchantinfo.item.show-max-level")) {
+                    it.maximumLevel
+                } else {
+                    1
+                }
 
-        slot(
-            EnchantedBookBuilder()
-                .addStoredEnchantment(enchantment, level)
-                .addItemFlag(ItemFlag.HIDE_ENCHANTS)
-                .setDisplayName(this.getFormattedName(level))
-                .addLoreLines(this.getFormattedDescription(level, player))
-                .addLoreLines {
-                    plugin.configYml.getStrings("enchantinfo.item.lore")
-                        .map {
-                            it.replace("%max_level%", enchantment.maxLevel.toString())
-                                .replace("%rarity%", this.enchantmentRarity.displayName)
-                                .replace(
-                                    "%targets%",
-                                    this.targets.joinToString(", ") { target -> target.displayName }
-                                )
-                                .replace(
-                                    "%conflicts%",
-                                    if (this.conflictsWithEverything) {
-                                        plugin.langYml.getFormattedString("all-conflicts")
-                                    } else {
-                                        this.conflicts.joinToString(", ") { conflict ->
-                                            conflict.wrap().getFormattedName(0)
-                                        }.ifEmpty { plugin.langYml.getFormattedString("no-conflicts") }
-                                    }
-                                )
-                                .replace("%tradeable%", this.isObtainableThroughTrading.parseYesOrNo(plugin.langYml))
-                                .replace("%discoverable%", this.isObtainableThroughDiscovery.parseYesOrNo(plugin.langYml))
-                                .replace("%enchantable%", this.isObtainableThroughEnchanting.parseYesOrNo(plugin.langYml))
+                slot(
+                    EnchantedBookBuilder()
+                        .addStoredEnchantment(enchantment, level)
+                        .addItemFlag(ItemFlag.HIDE_ENCHANTS)
+                        .setDisplayName(this.getFormattedName(level))
+                        .addLoreLines(this.getFormattedDescription(level, player))
+                        .addLoreLines {
+                            plugin.configYml.getStrings("enchantinfo.item.lore")
+                                .map {
+                                    it.replace("%max_level%", enchantment.maxLevel.toString())
+                                        .replace("%rarity%", this.enchantmentRarity.displayName)
+                                        .replace(
+                                            "%targets%",
+                                            this.targets.joinToString(", ") { target -> target.displayName }
+                                        )
+                                        .replace(
+                                            "%conflicts%",
+                                            if (this.conflictsWithEverything) {
+                                                plugin.langYml.getFormattedString("all-conflicts")
+                                            } else {
+                                                this.conflicts.joinToString(", ") { conflict ->
+                                                    conflict.wrap().getFormattedName(0)
+                                                }.ifEmpty { plugin.langYml.getFormattedString("no-conflicts") }
+                                            }
+                                        )
+                                        .replace("%tradeable%", this.isObtainableThroughTrading.parseYesOrNo(plugin.langYml))
+                                        .replace("%discoverable%", this.isObtainableThroughDiscovery.parseYesOrNo(plugin.langYml))
+                                        .replace("%enchantable%", this.isObtainableThroughEnchanting.parseYesOrNo(plugin.langYml))
+                                }
+                                .formatEco()
+                                .flatMap {
+                                    it.lineWrap(32, true)
+                                }
                         }
-                        .formatEco()
-                        .flatMap {
-                            it.lineWrap(32, true)
+                        .build()
+                        .fast()
+                        .apply {
+                            plugin.getProxy(HideStoredEnchantsProxy::class.java).hideStoredEnchants(this)
                         }
-                }
-                .build()
-                .fast()
-                .apply {
-                    plugin.getProxy(HideStoredEnchantsProxy::class.java).hideStoredEnchants(this)
-                }
-                .unwrap()
-        )
-    }
-}
+                        .unwrap()
+                )
+            }
+        }
 
 fun Boolean.parseYesOrNo(langYml: LangYml): String {
     return if (this) langYml.getFormattedString("yes") else langYml.getFormattedString("no")

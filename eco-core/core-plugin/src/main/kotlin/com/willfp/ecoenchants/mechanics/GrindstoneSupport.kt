@@ -11,7 +11,6 @@ import org.bukkit.event.Listener
 import org.bukkit.event.inventory.InventoryClickEvent
 import org.bukkit.inventory.GrindstoneInventory
 import org.bukkit.inventory.meta.EnchantmentStorageMeta
-import java.util.*
 import kotlin.math.max
 
 @Suppress("DEPRECATION")
