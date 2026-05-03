@@ -50,7 +50,7 @@ class EnchantmentSoulbound(
         private val soulboundKey = plugin.namespacedKeyFactory.create("soulbound")
 
         @EventHandler(
-            priority = EventPriority.HIGHEST,
+            priority = EventPriority.LOWEST,
             ignoreCancelled = true
         )
         fun handle(event: PlayerDeathEvent) {
