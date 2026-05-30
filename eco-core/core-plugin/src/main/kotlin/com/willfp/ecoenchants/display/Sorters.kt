@@ -1,7 +1,7 @@
 package com.willfp.ecoenchants.display
 
-import com.willfp.ecoenchants.EcoEnchantsPlugin
 import com.willfp.ecoenchants.enchant.wrap
+import com.willfp.ecoenchants.plugin
 import com.willfp.ecoenchants.rarity.EnchantmentRarities
 import com.willfp.ecoenchants.rarity.EnchantmentRarity
 import com.willfp.ecoenchants.type.EnchantmentType
@@ -15,7 +15,7 @@ interface EnchantmentSorter {
 object EnchantSorter {
     private val sorters = mutableListOf<EnchantmentSorter>()
 
-    internal fun reload(plugin: EcoEnchantsPlugin) {
+    internal fun reload() {
         sorters.clear()
 
         if (plugin.configYml.getBool("display.sort.rarity")) {
@@ -48,14 +48,14 @@ object AlphabeticSorter : EnchantmentSorter {
 object LengthSorter : EnchantmentSorter {
     override fun sort(enchantments: Collection<Enchantment>, children: List<EnchantmentSorter>): List<Enchantment> {
         @Suppress("DEPRECATION")
-        return enchantments.sortedBy { org.bukkit.ChatColor.stripColor(it.wrap().getFormattedName(0))!!.length }
+        return enchantments.sortedBy { org.bukkit.ChatColor.stripColor(it.wrap().getFormattedName(0))?.length ?: 0 }
     }
 }
 
 object TypeSorter : EnchantmentSorter {
     private val types = mutableListOf<EnchantmentType>()
 
-    fun update(plugin: EcoEnchantsPlugin) {
+    fun update() {
         types.clear()
         types.addAll(plugin.configYml.getStrings("display.sort.type-order").mapNotNull {
             EnchantmentTypes[it]
@@ -63,18 +63,11 @@ object TypeSorter : EnchantmentSorter {
     }
 
     override fun sort(enchantments: Collection<Enchantment>, children: List<EnchantmentSorter>): List<Enchantment> {
+        val sorted = children.getSafely(0).sort(enchantments, children.drop(1))
         val enchants = mutableListOf<Enchantment>()
-
         for (type in types) {
-            for (enchantment in children.getSafely(0).sort(enchantments, children.drop(1))) {
-                if (type != enchantment.wrap().type) {
-                    continue
-                }
-
-                enchants.add(enchantment)
-            }
+            enchants.addAll(sorted.filter { it.wrap().type == type })
         }
-
         return enchants
     }
 }
@@ -82,7 +75,7 @@ object TypeSorter : EnchantmentSorter {
 object RaritySorter : EnchantmentSorter {
     private val rarities = mutableListOf<EnchantmentRarity>()
 
-    fun update(plugin: EcoEnchantsPlugin) {
+    fun update() {
         rarities.clear()
         rarities.addAll(plugin.configYml.getStrings("display.sort.rarity-order").mapNotNull {
             EnchantmentRarities[it]
@@ -90,18 +83,11 @@ object RaritySorter : EnchantmentSorter {
     }
 
     override fun sort(enchantments: Collection<Enchantment>, children: List<EnchantmentSorter>): List<Enchantment> {
+        val sorted = children.getSafely(0).sort(enchantments, children.drop(1))
         val enchants = mutableListOf<Enchantment>()
-
         for (rarity in rarities) {
-            for (enchantment in children.getSafely(0).sort(enchantments, children.drop(1))) {
-                if (rarity != enchantment.wrap().enchantmentRarity) {
-                    continue
-                }
-
-                enchants.add(enchantment)
-            }
+            enchants.addAll(sorted.filter { it.wrap().enchantmentRarity == rarity })
         }
-
         return enchants
     }
 }

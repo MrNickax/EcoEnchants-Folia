@@ -1,9 +1,9 @@
 package com.willfp.ecoenchants.mechanics
 
-import com.willfp.eco.core.EcoPlugin
 import com.willfp.eco.core.fast.fast
 import com.willfp.eco.core.gui.player
 import com.willfp.ecoenchants.enchant.wrap
+import com.willfp.ecoenchants.plugin
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.entity.ExperienceOrb
 import org.bukkit.event.EventHandler
@@ -14,9 +14,7 @@ import org.bukkit.inventory.meta.EnchantmentStorageMeta
 import kotlin.math.max
 
 @Suppress("DEPRECATION")
-class GrindstoneSupport(
-    private val plugin: EcoPlugin
-) : Listener {
+object GrindstoneSupport : Listener {
     @EventHandler
     fun preGrindstone(event: InventoryClickEvent) {
         val inventory = event.view.topInventory as? GrindstoneInventory ?: return
@@ -94,15 +92,14 @@ class GrindstoneSupport(
         }
 
         // Force remove XP
-        event.player.scheduler.runDelayed (
-            this.plugin,
+        event.player.scheduler.runDelayed(
+            plugin,
             {
-                val loc = inventory.location
-
-                val orbs = loc?.getNearbyEntities(3.0, 3.0, 3.0)
-                    ?: emptyList()
-
-                for (orb in orbs.filterIsInstance<ExperienceOrb>()) {
+                val loc = inventory.location ?: return@runDelayed
+                val orbs = loc.getNearbyEntities(3.0, 3.0, 3.0)
+                    .filterIsInstance<ExperienceOrb>()
+                    .filter { it.spawnReason == ExperienceOrb.SpawnReason.GRINDSTONE }
+                for (orb in orbs) {
                     orb.remove()
                 }
             },

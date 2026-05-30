@@ -1,18 +1,22 @@
 package com.willfp.ecoenchants.mechanics
 
-import com.willfp.eco.core.EcoPlugin
 import com.willfp.eco.core.fast.fast
 import com.willfp.eco.core.proxy.ProxyConstants
 import com.willfp.eco.util.StringUtils
 import com.willfp.ecoenchants.enchant.EcoEnchants
 import com.willfp.ecoenchants.enchant.wrap
+import com.willfp.ecoenchants.plugin
 import org.bukkit.Material
 import org.bukkit.Tag
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import org.bukkit.event.inventory.InventoryClickEvent
+import org.bukkit.event.inventory.InventoryCloseEvent
 import org.bukkit.event.inventory.PrepareAnvilEvent
+import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.inventory.AnvilInventory
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.Damageable
 import org.bukkit.inventory.meta.EnchantmentStorageMeta
@@ -37,248 +41,7 @@ interface OpenInventoryProxy {
     fun getOpenInventory(player: Player): Any
 }
 
-class AnvilSupport(
-    private val plugin: EcoPlugin
-) : Listener {
-    /**
-     * Map to prevent incrementing cost several times as inventory events are fired 3 times.
-     */
-    private val antiRepeat = mutableSetOf<UUID>()
-
-    /**
-     * Class for AnvilGUI wrappers to ignore them.
-     */
-    private val anvilGuiClass = "net.wesjd.anvilgui.version.Wrapper" +
-            ProxyConstants.NMS_VERSION.substring(1) +
-            "\$AnvilContainer"
-
-    @EventHandler(priority = EventPriority.HIGHEST)
-    fun onAnvilPrepare(event: PrepareAnvilEvent) {
-        val player = event.viewers.getOrNull(0) as? Player ?: return
-        val permanenceCurse = EcoEnchants.getByID("permanence_curse")
-        val leftItem = event.inventory.getItem(0)
-        val rightItem = event.inventory.getItem(1)
-        if (permanenceCurse != null) {
-            if ((leftItem != null && leftItem.fast().getEnchants(true).containsKey(permanenceCurse.enchantment)) ||
-                (rightItem != null && rightItem.fast().getEnchants(true).containsKey(permanenceCurse.enchantment))
-            ) {
-                event.result = null
-                event.inventory.setItem(2, null)
-                return
-            }
-        }
-
-        if (this.plugin.getProxy(OpenInventoryProxy::class.java)
-                .getOpenInventory(player)::class.java.toString() == anvilGuiClass
-        ) {
-            return
-        }
-
-        if (antiRepeat.contains(player.uniqueId)) {
-            return
-        }
-
-        antiRepeat.add(player.uniqueId)
-
-        player.scheduler.run {
-            antiRepeat.remove(player.uniqueId)
-
-            val left = event.inventory.getItem(0)?.clone()
-            val old = left?.clone()
-            val right = event.inventory.getItem(1)?.clone()
-
-            event.result = null
-            event.inventory.setItem(2, null)
-
-            val result = doMerge(
-                left,
-                right,
-                @Suppress("REMOVAL", "DEPRECATION")
-                event.inventory.renameText ?: "",
-                player
-            )
-
-            val price = result.xp ?: 0
-            val outItem = result.result ?: ItemStack(Material.AIR)
-
-            @Suppress("REMOVAL", "DEPRECATION")
-            val oldCost = event.inventory.repairCost
-
-            val oldLeft = event.inventory.getItem(0)
-
-            if (result == FAIL) {
-                return@run
-            }
-
-            if (oldLeft == null || oldLeft.type != outItem.type) {
-                return@run
-            }
-
-            if (left == old) {
-                return@run
-            }
-
-            var cost = oldCost + price
-
-            // Unbelievably specific edge case
-            if (oldCost == -price) {
-                cost = price
-            }
-
-            // Cost could be less than zero at times, so I include that here.
-            if (cost <= 0) {
-                return@run
-            }
-
-            /*
-            Transplanted anti-dupe bodge from pre-recode.
-             */
-            val leftEnchants = left?.fast()?.getEnchants(true) ?: emptyMap()
-            val outEnchants = outItem.fast().getEnchants(true)
-
-            if (event.inventory.getItem(1) == null && leftEnchants != outEnchants) {
-                return@run
-            }
-
-            if (plugin.configYml.getBool("anvil.use-rework-penalty")) {
-                val repairCost = outItem.fast().repairCost
-                outItem.fast().repairCost = (repairCost + 1) * 2 - 1
-            }
-
-            @Suppress("REMOVAL", "DEPRECATION")
-            event.inventory.maximumRepairCost = plugin.configYml.getInt("anvil.max-repair-cost").infiniteIfNegative()
-
-            @Suppress("REMOVAL", "DEPRECATION")
-            event.inventory.repairCost = cost
-            event.result = outItem
-            event.inventory.setItem(2, outItem)
-        }
-    }
-
-    private fun doMerge(
-        left: ItemStack?,
-        right: ItemStack?,
-        itemName: String,
-        player: Player
-    ): AnvilResult {
-        if (left == null || left.type == Material.AIR) {
-            return FAIL
-        }
-
-        val formattedItemName = if (player.hasPermission("ecoenchants.anvil.color")) {
-            StringUtils.format(itemName)
-        } else {
-            @Suppress("DEPRECATION")
-            org.bukkit.ChatColor.stripColor(itemName)
-        }.let { if (it.isNullOrEmpty()) left.fast().displayName else it }
-
-        if (right == null || right.type == Material.AIR) {
-            if (left.fast().displayName == formattedItemName) {
-                return FAIL
-            }
-
-            left.fast().displayName =
-                formattedItemName.let { "§o$it" } // Not a great way to make it italic, but it works
-
-            return AnvilResult(left, 0)
-        }
-
-        val leftMeta = left.itemMeta
-        val rightMeta = right.itemMeta
-
-        var unitRepairCost = 0
-
-        // Unit repair
-        if (left.type != right.type) {
-            if (right.type.canUnitRepair(left.type) && leftMeta is Damageable) {
-                val perUnit = ceil(left.type.maxDurability / 4.0).toInt()
-
-                val max = ceil(leftMeta.damage.toDouble() / perUnit).toInt()
-                val toDeduct = min(max, right.amount)
-
-                unitRepairCost = toDeduct
-
-                if (toDeduct <= 0) {
-                    return FAIL
-                } else {
-                    val newDamage = leftMeta.damage - toDeduct * perUnit
-                    leftMeta.damage = newDamage.coerceAtLeast(0) // Prevent negative damage
-
-                    right.amount -= toDeduct
-                }
-            } else {
-                if (right.type != Material.ENCHANTED_BOOK) {
-                    return FAIL
-                }
-            }
-        }
-
-        left.fast().displayName = formattedItemName.let { "§o$it" } // Same again, it works though
-
-        val leftEnchants = left.fast().getEnchants(true)
-        val rightEnchants = right.fast().getEnchants(true)
-
-        val outEnchants = leftEnchants.toMutableMap()
-
-        for ((enchant, level) in rightEnchants) {
-            if (outEnchants.containsKey(enchant)) {
-                val currentLevel = outEnchants[enchant]!!
-                outEnchants[enchant] = if (level == currentLevel) {
-                    min(enchant.maxLevel, level + 1)
-                } else {
-                    max(level, currentLevel)
-                }
-            } else {
-                // Running .wrap() to use EcoEnchantLike canEnchantItem logic
-                if (enchant.wrap().canEnchantItem(left)) {
-                    if (outEnchants.size < plugin.configYml.getInt("anvil.enchant-limit").infiniteIfNegative()) {
-                        outEnchants[enchant] = level
-                    }
-                }
-            }
-        }
-
-        // Item repair - extra check for unit repair cost to prevent weird damage
-        // Enchanted books seem to be damageable? Not quite sure why. Anyway, there's an extra check.
-        if (leftMeta is Damageable && rightMeta is Damageable && unitRepairCost == 0 && rightMeta !is EnchantmentStorageMeta) {
-            val maxDamage = left.type.maxDurability.toInt()
-            val leftDurability = maxDamage - leftMeta.damage
-            val rightDurability = maxDamage - rightMeta.damage
-            val damage = maxDamage - max(maxDamage, leftDurability + rightDurability)
-
-            leftMeta.damage = damage.coerceAtLeast(0) // Prevent negative damage
-        }
-
-        if (leftMeta is EnchantmentStorageMeta) {
-            for (storedEnchant in leftMeta.storedEnchants.keys.toSet()) {
-                leftMeta.removeStoredEnchant(storedEnchant)
-            }
-
-            for ((enchant, level) in outEnchants) {
-                leftMeta.addStoredEnchant(enchant, level, true)
-            }
-        } else {
-            for (storedEnchant in leftMeta.enchants.keys.toSet()) {
-                leftMeta.removeEnchant(storedEnchant)
-            }
-
-            for ((enchant, level) in outEnchants) {
-                leftMeta.addEnchant(enchant, level, true)
-            }
-        }
-
-        left.itemMeta = leftMeta
-
-        val enchantLevelDiff = abs(leftEnchants.values.sum() - outEnchants.values.sum())
-        val xpCost =
-            enchantLevelDiff.toDouble().pow(plugin.configYml.getDouble("anvil.cost-exponent")) + unitRepairCost
-
-        return AnvilResult(left, xpCost.roundToInt())
-    }
-}
-
-
-private val repair = mapOf<Collection<Material>, Collection<Material>>(
+private val repair = mutableMapOf<Collection<Material>, Collection<Material>>(
     Pair(
         Tag.PLANKS.values,
         listOf(
@@ -398,6 +161,358 @@ private val repair = mapOf<Collection<Material>, Collection<Material>>(
         )
     )
 )
+
+object AnvilSupport : Listener {
+    init {
+        if (is_1_21_11() && repair[Tag.PLANKS.values]?.contains(Material.WOODEN_SPEAR) != true) {
+
+            repair[Tag.PLANKS.values] = repair[Tag.PLANKS.values]!! + listOf(
+                Material.WOODEN_SPEAR
+            )
+
+            repair[listOf(Material.COBBLESTONE, Material.COBBLED_DEEPSLATE, Material.BLACKSTONE)] =
+                repair[listOf(Material.COBBLESTONE, Material.COBBLED_DEEPSLATE, Material.BLACKSTONE)]!! + listOf(
+                    Material.STONE_SPEAR
+                )
+
+            repair[listOf(Material.COPPER_INGOT)] = listOf(
+                Material.COPPER_HELMET,
+                Material.COPPER_CHESTPLATE,
+                Material.COPPER_LEGGINGS,
+                Material.COPPER_BOOTS,
+                Material.COPPER_SWORD,
+                Material.COPPER_PICKAXE,
+                Material.COPPER_AXE,
+                Material.COPPER_SHOVEL,
+                Material.COPPER_HOE,
+                Material.COPPER_SPEAR
+            )
+
+            repair[listOf(Material.IRON_INGOT)] = repair[listOf(Material.IRON_INGOT)]!! + listOf(
+                Material.IRON_SPEAR
+            )
+
+            repair[listOf(Material.GOLD_INGOT)] = repair[listOf(Material.GOLD_INGOT)]!! + listOf(
+                Material.GOLDEN_SPEAR
+            )
+
+            repair[listOf(Material.DIAMOND)] = repair[listOf(Material.DIAMOND)]!! + listOf(
+                Material.DIAMOND_SPEAR
+            )
+
+            repair[listOf(Material.NETHERITE_INGOT)] = repair[listOf(Material.NETHERITE_INGOT)]!! + listOf(
+                Material.NETHERITE_SPEAR
+            )
+        }
+    }
+
+    private val latestPreviewGeneration = mutableMapOf<UUID, Int>()
+
+    private val renderedPreviewGeneration = mutableMapOf<UUID, Int>()
+
+    /**
+     * Class for AnvilGUI wrappers to ignore them.
+     */
+    private val anvilGuiClass: Class<*>? = try {
+        Class.forName(
+            "net.wesjd.anvilgui.version.Wrapper" +
+                    ProxyConstants.NMS_VERSION.substring(1) +
+                    $$"$AnvilContainer"
+        )
+    } catch (_: ClassNotFoundException) {
+        null
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    fun onAnvilResultClick(event: InventoryClickEvent) {
+        val player = event.whoClicked as? Player ?: return
+        val inventory = event.view.topInventory as? AnvilInventory ?: return
+
+        if (event.rawSlot != 2) {
+            return
+        }
+
+        if (plugin.getProxy(OpenInventoryProxy::class.java)
+                .getOpenInventory(player)::class.java == anvilGuiClass
+        ) {
+            return
+        }
+
+        val latestGeneration = latestPreviewGeneration[player.uniqueId] ?: return
+        val renderedGeneration = renderedPreviewGeneration[player.uniqueId]
+
+        if (latestGeneration == renderedGeneration) {
+            return
+        }
+
+        event.isCancelled = true
+        event.currentItem = null
+        inventory.setItem(2, null)
+    }
+
+    @EventHandler
+    fun onAnvilClose(event: InventoryCloseEvent) {
+        val player = event.player as? Player ?: return
+
+        latestPreviewGeneration.remove(player.uniqueId)
+        renderedPreviewGeneration.remove(player.uniqueId)
+    }
+
+    @EventHandler
+    fun onQuit(event: PlayerQuitEvent) {
+        latestPreviewGeneration.remove(event.player.uniqueId)
+        renderedPreviewGeneration.remove(event.player.uniqueId)
+    }
+
+    @Suppress("UnstableApiUsage")
+    @EventHandler(priority = EventPriority.HIGHEST)
+    fun onAnvilPrepare(event: PrepareAnvilEvent) {
+        val player = event.viewers.getOrNull(0) as? Player ?: return
+        val generation = (latestPreviewGeneration[player.uniqueId] ?: 0) + 1
+        latestPreviewGeneration[player.uniqueId] = generation
+        renderedPreviewGeneration.remove(player.uniqueId)
+        val permanenceCurse = EcoEnchants.getByID("permanence_curse")
+        val leftItem = event.inventory.getItem(0)
+        val rightItem = event.inventory.getItem(1)
+        if (permanenceCurse != null) {
+            if ((leftItem != null && leftItem.fast().getEnchants(true).containsKey(permanenceCurse.enchantment)) ||
+                (rightItem != null && rightItem.fast().getEnchants(true).containsKey(permanenceCurse.enchantment))
+            ) {
+                event.result = null
+                event.inventory.setItem(2, null)
+                return
+            }
+        }
+
+        if (plugin.getProxy(OpenInventoryProxy::class.java)
+                .getOpenInventory(player)::class.java == anvilGuiClass
+        ) {
+            return
+        }
+
+        val baseRepairCost = event.view.repairCost
+
+        event.result = null
+        event.inventory.setItem(2, null)
+
+        player.scheduler.run {
+            if (latestPreviewGeneration[player.uniqueId] != generation) {
+                return@run
+            }
+
+            val left = event.inventory.getItem(0)?.clone()
+            val old = left?.clone()
+            val right = event.inventory.getItem(1)?.clone()
+
+            val result = doMerge(
+                left,
+                right,
+                @Suppress("REMOVAL", "DEPRECATION")
+                event.inventory.renameText ?: "",
+                player
+            )
+
+            if (result == FAIL) {
+                return@run
+            }
+
+            event.result = null
+            event.inventory.setItem(2, null)
+
+            val price = result.xp ?: 0
+            val outItem = result.result ?: ItemStack(Material.AIR)
+
+            val oldLeft = event.inventory.getItem(0)
+
+            if (oldLeft == null || oldLeft.type != outItem.type) {
+                return@run
+            }
+
+            if (left == old) {
+                return@run
+            }
+
+            var cost = baseRepairCost + price
+
+            // Unbelievably specific edge case
+            if (baseRepairCost == -price) {
+                cost = price
+            }
+
+            // Cost could be less than zero at times, so I include that here.
+            if (cost <= 0) {
+                return@run
+            }
+
+            /*
+            Transplanted anti-dupe bodge from pre-recode.
+             */
+            val leftEnchants = left?.fast()?.getEnchants(true) ?: emptyMap()
+            val outEnchants = outItem.fast().getEnchants(true)
+
+            if (event.inventory.getItem(1) == null && leftEnchants != outEnchants) {
+                return@run
+            }
+
+            if (plugin.configYml.getBool("anvil.use-rework-penalty")) {
+                val repairCost = outItem.fast().repairCost
+                outItem.fast().repairCost = (repairCost + 1) * 2 - 1
+            }
+
+            val clampRepairCost = plugin.configYml.getBool("anvil.clamp-repair-cost")
+            val maxRepairCost = plugin.configYml.getInt("anvil.max-repair-cost")
+
+            if (latestPreviewGeneration[player.uniqueId] != generation) {
+                return@run
+            }
+
+            event.view.maximumRepairCost = maxRepairCost
+            event.view.repairCost = if (clampRepairCost) cost.coerceAtMost(maxRepairCost) else cost
+
+            if (!clampRepairCost && maxRepairCost > 0 && cost >= maxRepairCost) {
+                return@run
+            }
+
+            if (latestPreviewGeneration[player.uniqueId] != generation) {
+                return@run
+            }
+
+            event.result = outItem
+            event.inventory.setItem(2, outItem)
+            renderedPreviewGeneration[player.uniqueId] = generation
+        }
+    }
+
+    private fun doMerge(
+        left: ItemStack?,
+        right: ItemStack?,
+        itemName: String,
+        player: Player
+    ): AnvilResult {
+        if (left == null || left.type == Material.AIR) {
+            return FAIL
+        }
+
+        val formattedItemName = if (player.hasPermission("ecoenchants.anvil.color")) {
+            StringUtils.format(itemName)
+        } else {
+            @Suppress("DEPRECATION")
+            org.bukkit.ChatColor.stripColor(itemName)
+        }.let { if (it.isNullOrEmpty()) left.fast().displayName else it }
+
+        if (right == null || right.type == Material.AIR) {
+            if (left.fast().displayName == formattedItemName) {
+                return FAIL
+            }
+
+            left.fast().displayName =
+                formattedItemName.let { "§o$it" } // Not a great way to make it italic, but it works
+
+            return AnvilResult(left, 0)
+        }
+
+        val leftMeta = left.itemMeta
+        val rightMeta = right.itemMeta
+
+        var unitRepairCost = 0
+
+        // Unit repair
+        if (left.type != right.type) {
+            if (right.type.canUnitRepair(left.type) && leftMeta is Damageable) {
+                val perUnit = ceil(left.type.maxDurability / 4.0).toInt()
+
+                val max = ceil(leftMeta.damage.toDouble() / perUnit).toInt()
+                val toDeduct = min(max, right.amount)
+
+                unitRepairCost = toDeduct
+
+                if (toDeduct <= 0) {
+                    return FAIL
+                } else {
+                    val newDamage = leftMeta.damage - toDeduct * perUnit
+                    leftMeta.damage = newDamage.coerceAtLeast(0) // Prevent negative damage
+
+                    right.amount -= toDeduct
+                }
+            } else {
+                if (right.type != Material.ENCHANTED_BOOK) {
+                    return FAIL
+                }
+            }
+        }
+
+        left.fast().displayName = formattedItemName.let { "§o$it" } // Same again, it works though
+
+        val leftEnchants = left.fast().getEnchants(true)
+        val rightEnchants = right.fast().getEnchants(true)
+
+        val outEnchants = leftEnchants.toMutableMap()
+
+        for ((enchant, level) in rightEnchants) {
+            if (outEnchants.containsKey(enchant)) {
+                val currentLevel = outEnchants[enchant]!!
+                outEnchants[enchant] = if (level == currentLevel) {
+                    min(enchant.maxLevel, level + 1)
+                } else {
+                    max(level, currentLevel)
+                }
+            } else {
+                // Running .wrap() to use EcoEnchantLike canEnchantItem logic
+                if (enchant.wrap().canEnchantItem(left, outEnchants.keys)) {
+                    if (outEnchants.size < plugin.configYml.getInt("anvil.enchant-limit").infiniteIfNegative()) {
+                        outEnchants[enchant] = level
+                    }
+                }
+            }
+        }
+
+        // Item repair - extra check for unit repair cost to prevent weird damage
+        // Enchanted books seem to be damageable? Not quite sure why. Anyway, there's an extra check.
+        if (leftMeta is Damageable && rightMeta is Damageable && unitRepairCost == 0 && rightMeta !is EnchantmentStorageMeta) {
+            val maxDamage = left.type.maxDurability.toInt()
+            val leftDurability = maxDamage - leftMeta.damage
+            val rightDurability = maxDamage - rightMeta.damage
+            val damage = maxDamage - min(maxDamage, leftDurability + rightDurability)
+
+            leftMeta.damage = damage.coerceAtLeast(0) // Prevent negative damage
+        }
+
+        if (leftMeta is EnchantmentStorageMeta) {
+            for (storedEnchant in leftMeta.storedEnchants.keys.toSet()) {
+                leftMeta.removeStoredEnchant(storedEnchant)
+            }
+
+            for ((enchant, level) in outEnchants) {
+                leftMeta.addStoredEnchant(enchant, level, true)
+            }
+        } else {
+            for (storedEnchant in leftMeta.enchants.keys.toSet()) {
+                leftMeta.removeEnchant(storedEnchant)
+            }
+
+            for ((enchant, level) in outEnchants) {
+                leftMeta.addEnchant(enchant, level, true)
+            }
+        }
+
+        left.itemMeta = leftMeta
+
+        val enchantLevelDiff = abs(leftEnchants.values.sum() - outEnchants.values.sum())
+        val xpCost =
+            enchantLevelDiff.toDouble().pow(plugin.configYml.getDouble("anvil.cost-exponent")) + unitRepairCost
+
+        return AnvilResult(left, xpCost.roundToInt())
+    }
+}
+
+private fun is_1_21_11(): Boolean {
+    return try {
+        Material.IRON_SPEAR
+        true
+    } catch (_: NoSuchFieldError) {
+        false
+    }
+}
 
 fun Material.canUnitRepair(other: Material): Boolean {
     for ((units, repairable) in repair) {

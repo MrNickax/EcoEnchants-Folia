@@ -1,6 +1,6 @@
 package com.willfp.ecoenchants
 
-import com.willfp.eco.core.LifecyclePosition
+import com.willfp.eco.core.bstats.EcoMetricsChart
 import com.willfp.eco.core.command.impl.PluginCommand
 import com.willfp.eco.core.display.DisplayModule
 import com.willfp.eco.core.integrations.IntegrationLoader
@@ -29,8 +29,11 @@ import com.willfp.ecoenchants.mechanics.ExtraItemSupport
 import com.willfp.ecoenchants.mechanics.GrindstoneSupport
 import com.willfp.ecoenchants.mechanics.LootSupport
 import com.willfp.ecoenchants.mechanics.VillagerSupport
+import com.willfp.ecoenchants.rarity.EnchantmentRarities
 import com.willfp.ecoenchants.target.EnchantFinder
 import com.willfp.ecoenchants.target.EnchantFinder.clearEnchantmentCache
+import com.willfp.ecoenchants.target.EnchantmentTargets
+import com.willfp.ecoenchants.type.EnchantmentTypes
 import com.willfp.libreforge.NamedValue
 import com.willfp.libreforge.loader.LibreforgePlugin
 import com.willfp.libreforge.loader.configs.ConfigCategory
@@ -87,34 +90,34 @@ class EcoEnchantsPlugin : LibreforgePlugin() {
 
     override fun handleReload() {
         DisplayCache.reload()
-        EnchantSorter.reload(this)
-        ExtraItemSupport.reload(this)
-        EnchantGUI.reload(this)
+        EnchantSorter.reload()
+        ExtraItemSupport.reload()
+        EnchantGUI.reload()
     }
 
     override fun loadListeners(): List<Listener> {
         return listOf(
-            VillagerSupport(this),
-            EnchantingTableSupport(this),
-            LootSupport(this),
-            AnvilSupport(this),
-            LoreConversion(this),
-            GrindstoneSupport(this)
+            VillagerSupport,
+            EnchantingTableSupport,
+            LootSupport,
+            AnvilSupport,
+            LoreConversion,
+            GrindstoneSupport
         )
     }
 
     override fun loadIntegrationLoaders(): List<IntegrationLoader> {
         return listOf(
-            IntegrationLoader("Essentials") { EnchantRegistrations.register(EssentialsIntegration()) },
-            IntegrationLoader("CMI") { EnchantRegistrations.register(CMIIntegration()) }
+            IntegrationLoader("Essentials") { EnchantRegistrations.register(EssentialsIntegration) },
+            IntegrationLoader("CMI") { EnchantRegistrations.register(CMIIntegration) }
         )
     }
 
     override fun loadPluginCommands(): List<PluginCommand> {
         return listOf(
-            CommandEcoEnchants(this),
-            CommandEnchantInfo(this),
-            CommandEnchant(this)
+            CommandEcoEnchants,
+            CommandEnchantInfo,
+            CommandEnchant
         )
     }
 
@@ -124,7 +127,17 @@ class EcoEnchantsPlugin : LibreforgePlugin() {
         }
 
         return listOf(
-            EnchantDisplay(this)
+            EnchantDisplay
         )
     }
+
+    override fun getCustomCharts() = listOf(
+        EcoMetricsChart.SingleLine("total_enchants") { EcoEnchants.values().size },
+        EcoMetricsChart.SingleLine("total_rarities") { EnchantmentRarities.values().size },
+        EcoMetricsChart.SingleLine("total_targets") { EnchantmentTargets.values().size },
+        EcoMetricsChart.SingleLine("total_types") { EnchantmentTypes.values().size },
+        EcoMetricsChart.SimplePie("display_enabled") {
+            if (configYml.getBool("display.enabled")) "enabled" else "disabled"
+        }
+    )
 }

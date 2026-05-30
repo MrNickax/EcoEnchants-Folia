@@ -6,7 +6,8 @@ group = "com.willfp"
 version = rootProject.version
 
 dependencies {
-    implementation(project(":eco-core:core-nms:v1_21_4", configuration = "shadow"))
+    implementation(project(":eco-core:core-nms:v1_21_8", configuration = "shadow"))
+    implementation("net.kyori:adventure-text-serializer-ansi:4.18.0")
     paperweight.paperDevBundle("1.21.10-R0.1-SNAPSHOT")
 }
 
@@ -21,8 +22,14 @@ tasks {
 
     shadowJar {
         relocate(
-            "com.willfp.ecoenchants.proxy.v1_21_4",
+            "com.willfp.ecoenchants.proxy.v1_21_8",
             "com.willfp.ecoenchants.proxy.v1_21_10",
         )
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
     }
 }

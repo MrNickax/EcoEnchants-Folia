@@ -1,8 +1,8 @@
 package com.willfp.ecoenchants.enchant
 
-import com.willfp.eco.core.EcoPlugin
 import com.willfp.eco.core.fast.fast
 import com.willfp.eco.util.NumberUtils
+import com.willfp.ecoenchants.plugin
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
@@ -12,9 +12,7 @@ import org.bukkit.inventory.BlockInventoryHolder
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.EnchantmentStorageMeta
 
-class LoreConversion(
-    private val plugin: EcoPlugin
-) : Listener {
+object LoreConversion : Listener {
     @EventHandler
     fun loreConverter(event: PlayerItemHeldEvent) {
         if (!plugin.configYml.getBool("lore-conversion.enabled")) {
@@ -52,6 +50,7 @@ class LoreConversion(
         val meta = itemStack.itemMeta ?: return
 
         val toAdd = mutableMapOf<Enchantment, Int>()
+        val matchedLines = mutableListOf<String>()
 
         val lore = itemStack.fast().lore.toMutableList()
 
@@ -94,16 +93,17 @@ class LoreConversion(
             }
 
             toAdd[enchant.enchantment] = level
+            matchedLines.add(line)
         }
 
 
         if (meta is EnchantmentStorageMeta) {
-            lore.clear()
+            lore.removeAll(matchedLines)
             for ((enchant, level) in toAdd) {
                 meta.addStoredEnchant(enchant, level, true)
             }
         } else {
-            lore.clear()
+            lore.removeAll(matchedLines)
             for ((enchant, level) in toAdd) {
                 meta.addEnchant(enchant, level, true)
             }

@@ -5,10 +5,8 @@ import com.willfp.eco.core.items.TestableItem
 import com.willfp.eco.core.recipe.parts.EmptyTestableItem
 import com.willfp.eco.util.NumberUtils
 import com.willfp.eco.util.randDouble
-import com.willfp.ecoenchants.EcoEnchantsPlugin
-import com.willfp.ecoenchants.enchant.EcoEnchant
 import com.willfp.ecoenchants.enchant.EcoEnchants
-import com.willfp.ecoenchants.enchant.conflictsWithDeep
+import com.willfp.ecoenchants.plugin
 import org.bukkit.Bukkit
 import org.bukkit.GameMode
 import org.bukkit.Material
@@ -25,10 +23,7 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.min
 
-
-class EnchantingTableSupport(
-    private val plugin: EcoEnchantsPlugin
-) : Listener {
+object EnchantingTableSupport : Listener {
     @EventHandler
     fun onLeave(event: PlayerQuitEvent) {
         ExtraItemSupport.currentlyEnchantingExtraItem.remove(event.player.uniqueId)
@@ -86,7 +81,7 @@ class EnchantingTableSupport(
                 continue
             }
 
-            if (!enchantment.canEnchantItem(item)) {
+            if (!enchantment.canEnchantItem(item, toAdd.keys)) {
                 continue
             }
 
@@ -107,7 +102,7 @@ class EnchantingTableSupport(
                 continue
             }
 
-            if (toAdd.size >= this.plugin.configYml.getInt("enchanting-table.cap")) {
+            if (toAdd.size >= plugin.configYml.getInt("enchanting-table.cap")) {
                 break
             }
 
@@ -115,16 +110,6 @@ class EnchantingTableSupport(
                 break
             }
 
-            if (toAdd.any { (it, _) -> enchantment.enchantment.conflictsWithDeep(it) }) {
-                continue
-            }
-
-            if (
-                toAdd.keys.filterIsInstance<EcoEnchant>()
-                    .count { it.type == enchantment.type } >= enchantment.type.limit
-            ) {
-                continue
-            }
 
             val maxLevel = enchantment.maximumLevel
             val maxObtainableLevel = plugin.configYml.getInt("enchanting-table.maximum-obtainable-level")
@@ -139,7 +124,7 @@ class EnchantingTableSupport(
             val levelPart3 = NumberUtils.bias(levelPart2, enchantment.type.highLevelBias)
             val level = ceil(levelPart3 * maxLevel).coerceIn(1.0..maxLevel.toDouble()).toInt()
 
-            multiplier /= this.plugin.configYml.getDouble("enchanting-table.reduction")
+            multiplier /= plugin.configYml.getDouble("enchanting-table.reduction")
 
             toAdd[enchantment.enchantment] = level
         }
@@ -147,23 +132,27 @@ class EnchantingTableSupport(
         toAdd.forEach(event.enchantsToAdd::putIfAbsent)
 
         if (toAdd.isEmpty() && isExtraEnchantable) {
-            toAdd[Enchantment.UNBREAKING] =
-                ExtraItemSupport.currentlyEnchantingExtraItem[player.uniqueId]!![event.whichButton()]
-            ExtraItemSupport.currentlyEnchantingExtraItem.remove(player.uniqueId)
+            val extraLevels = ExtraItemSupport.currentlyEnchantingExtraItem.remove(player.uniqueId)
+            if (extraLevels != null) {
+                toAdd[Enchantment.UNBREAKING] = extraLevels[event.whichButton()]
+            } else {
+                event.isCancelled = true
+                return
+            }
         }
 
         // I remember writing this back in 8.x.x and deleting it during the recode
         // It's here because books don't work with this event, for some reason
-        if (item.type != Material.ENCHANTED_BOOK) return
-
-        player.scheduler.run {
-            if (!event.isCancelled) {
-                val postEnchantItem = event.inventory.getItem(0)
-                val meta = postEnchantItem?.itemMeta as? EnchantmentStorageMeta
-                for ((enchant, level) in event.enchantsToAdd) {
-                    meta?.addStoredEnchant(enchant, level, true)
+        if (item.type == Material.ENCHANTED_BOOK) {
+            player.scheduler.run {
+                if (!event.isCancelled) {
+                    val postEnchantItem = event.inventory.getItem(0)
+                    val meta = postEnchantItem?.itemMeta as? EnchantmentStorageMeta
+                    for ((enchant, level) in event.enchantsToAdd) {
+                        meta?.addStoredEnchant(enchant, level, true)
+                    }
+                    postEnchantItem?.itemMeta = meta
                 }
-                postEnchantItem?.itemMeta = meta
             }
         }
     }
@@ -239,7 +228,7 @@ object ExtraItemSupport {
 
     internal val extraEnchantableItems = mutableListOf<TestableItem>()
 
-    internal fun reload(plugin: EcoEnchantsPlugin) {
+    internal fun reload() {
         extraEnchantableItems.clear()
         extraEnchantableItems.addAll(plugin.targetsYml.getStrings("extra-enchantable-items").map {
             Items.lookup(it)
