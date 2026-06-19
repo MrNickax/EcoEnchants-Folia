@@ -7,6 +7,7 @@ import com.willfp.ecoenchants.enchant.wrap
 import com.willfp.ecoenchants.plugin
 import org.bukkit.Bukkit
 import org.bukkit.Material
+import org.bukkit.Sound
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
@@ -168,7 +169,6 @@ object BedrockBookApplySupport : Listener {
             if (valid.isEmpty()) {
                 // Shouldn't happen, but never eat the items.
                 give(player, p.target, p.book)
-                player.sendMessage("§cNo se pudo aplicar; se te han devuelto los objetos.")
                 return@run
             }
 
@@ -184,7 +184,7 @@ object BedrockBookApplySupport : Listener {
 
             // One book was consumed; hand back the enchanted item.
             give(player, p.target)
-            player.sendMessage("§a✔ Encantamiento aplicado.")
+            player.playSound(player.location, Sound.BLOCK_ANVIL_USE, 1.0f, 1.0f)
         }
     }
 
