@@ -10,10 +10,11 @@ import org.bukkit.Material
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.inventory.InventoryCloseEvent
+import org.bukkit.event.inventory.PrepareAnvilEvent
 import org.bukkit.event.player.PlayerQuitEvent
-import org.bukkit.inventory.AnvilInventory
 import org.bukkit.inventory.ItemStack
 import org.geysermc.cumulus.form.ModalForm
 import org.geysermc.floodgate.api.FloodgateApi
@@ -28,14 +29,15 @@ import java.util.function.Consumer
  * Floodgate form over the open anvil (it just queues) nor force the client anvil closed from the
  * server (the Bedrock anvil UI is client-authoritative).
  *
- * So: when a Bedrock player closes an anvil that holds a target item + an enchanted book with an
- * applicable custom enchantment, we take the inputs into custody and show a native confirmation form.
- * On confirm the enchantment is applied (free, one book consumed) and the item handed back via
+ * So: when a Bedrock player places a target item + an enchanted book with an applicable custom
+ * enchantment in an anvil, we take the inputs into custody. A native confirmation form is then sent;
+ * because Bedrock holds it behind the open anvil, it appears once the player closes the anvil. On
+ * confirm the enchantment is applied (free, one book consumed) and the item handed back via
  * telekinesis; on cancel/dismiss the items are returned untouched.
  */
 object BedrockBookApplySupport : Listener {
-    // Ticks to wait after the anvil closed before sending the form, so the close settles on the client.
-    private const val FORM_DELAY_TICKS = 3L
+    // Ticks to wait after taking the items before sending the form (lets the anvil state settle).
+    private const val FORM_DELAY_TICKS = 10L
 
     private val colorCodes = Regex("[§&][0-9A-Fa-fK-Ok-oRr]")
 
@@ -47,6 +49,9 @@ object BedrockBookApplySupport : Listener {
     )
 
     private val pending = mutableMapOf<UUID, Pending>()
+
+    // Debounce so the form is only offered once per distinct item+book combination.
+    private val promptedAnvilSignature = mutableMapOf<UUID, Int>()
 
     private val floodgatePresent: Boolean by lazy {
         Bukkit.getPluginManager().getPlugin("floodgate") != null
@@ -84,43 +89,71 @@ object BedrockBookApplySupport : Listener {
         }
     }
 
-    @EventHandler
-    fun onAnvilClose(event: InventoryCloseEvent) {
-        val player = event.player as? Player ?: return
-        val anvil = event.inventory as? AnvilInventory ?: return
+    @EventHandler(priority = EventPriority.MONITOR)
+    fun onAnvilCombine(event: PrepareAnvilEvent) {
+        val player = event.viewers.getOrNull(0) as? Player ?: return
 
         if (!isBedrock(player) || pending.containsKey(player.uniqueId)) {
             return
         }
 
-        val item = anvil.getItem(0) ?: return
-        val book = anvil.getItem(1) ?: return
+        val item = event.inventory.getItem(0)
+        val book = event.inventory.getItem(1)
 
-        val applicable = applicableEnchants(item, book)
-        if (applicable.isEmpty()) {
+        if (item == null || book == null) {
+            promptedAnvilSignature.remove(player.uniqueId)
             return
         }
 
-        val target = item.clone()
-        val bookClone = book.clone()
+        if (applicableEnchants(item, book).isEmpty()) {
+            promptedAnvilSignature.remove(player.uniqueId)
+            return
+        }
 
-        // Take the inputs into custody so vanilla doesn't also return them to the player (avoid dupe).
-        anvil.setItem(0, null)
-        anvil.setItem(1, null)
+        // Only offer once per distinct input combination.
+        val signature = 31 * item.hashCode() + book.hashCode()
+        if (promptedAnvilSignature[player.uniqueId] == signature) {
+            return
+        }
+        promptedAnvilSignature[player.uniqueId] = signature
 
-        pending[player.uniqueId] = Pending(target, bookClone, applicable)
+        val inventory = event.inventory
 
-        // Send the form a few ticks after the close settles on the client.
-        player.scheduler.runDelayed(
-            plugin,
-            {
-                if (pending.containsKey(player.uniqueId)) {
-                    sendConfirmation(player, applicable)
-                }
-            },
-            {},
-            FORM_DELAY_TICKS
-        )
+        // Defer one tick so we can safely mutate the anvil, then take items + queue the form.
+        player.scheduler.run {
+            if (pending.containsKey(player.uniqueId)) {
+                return@run
+            }
+
+            val curItem = inventory.getItem(0) ?: return@run
+            val curBook = inventory.getItem(1) ?: return@run
+            val applicable = applicableEnchants(curItem, curBook)
+            if (applicable.isEmpty()) {
+                return@run
+            }
+
+            val target = curItem.clone()
+            val bookClone = curBook.clone().apply { amount = 1 }
+
+            // Take the item and one book out of the anvil. Any remaining books are left in the anvil
+            // and returned to the player when it closes.
+            inventory.setItem(0, null)
+            val remaining = curBook.amount - 1
+            inventory.setItem(1, if (remaining <= 0) null else curBook.clone().apply { amount = remaining })
+
+            pending[player.uniqueId] = Pending(target, bookClone, applicable)
+
+            player.scheduler.runDelayed(
+                plugin,
+                {
+                    if (pending.containsKey(player.uniqueId)) {
+                        sendConfirmation(player, applicable)
+                    }
+                },
+                {},
+                FORM_DELAY_TICKS
+            )
+        }
     }
 
     private fun confirm(player: Player) {
@@ -149,12 +182,8 @@ object BedrockBookApplySupport : Listener {
             }
             p.target.itemMeta = meta
 
-            // One book is consumed; hand back the enchanted item plus any leftover books in the stack.
+            // One book was consumed; hand back the enchanted item.
             give(player, p.target)
-            if (p.book.amount > 1) {
-                give(player, p.book.clone().apply { amount = p.book.amount - 1 })
-            }
-
             player.sendMessage("§a✔ Encantamiento aplicado.")
         }
     }
@@ -208,7 +237,14 @@ object BedrockBookApplySupport : Listener {
     }
 
     @EventHandler
+    fun onClose(event: InventoryCloseEvent) {
+        promptedAnvilSignature.remove(event.player.uniqueId)
+    }
+
+    @EventHandler
     fun onQuit(event: PlayerQuitEvent) {
+        promptedAnvilSignature.remove(event.player.uniqueId)
+
         // Never lose items held in custody: put them back in the inventory (saved on quit), dropping
         // only what genuinely doesn't fit.
         val p = pending.remove(event.player.uniqueId) ?: return
