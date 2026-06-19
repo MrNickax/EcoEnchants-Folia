@@ -42,6 +42,7 @@ allprojects {
         maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
         maven("https://repo.codemc.org/repository/nms/")
         maven("https://repo.essentialsx.net/releases/")
+        maven("https://repo.opencollab.dev/main/")
         maven("https://jitpack.io") {
             content { includeGroupByRegex("com\\.github\\..*") }
         }

@@ -24,6 +24,7 @@ import com.willfp.ecoenchants.integrations.EnchantRegistrations
 import com.willfp.ecoenchants.integrations.plugins.CMIIntegration
 import com.willfp.ecoenchants.integrations.plugins.EssentialsIntegration
 import com.willfp.ecoenchants.mechanics.AnvilSupport
+import com.willfp.ecoenchants.mechanics.BedrockBookApplySupport
 import com.willfp.ecoenchants.mechanics.EnchantingTableSupport
 import com.willfp.ecoenchants.mechanics.ExtraItemSupport
 import com.willfp.ecoenchants.mechanics.GrindstoneSupport
@@ -102,7 +103,8 @@ class EcoEnchantsPlugin : LibreforgePlugin() {
             LootSupport,
             AnvilSupport,
             LoreConversion,
-            GrindstoneSupport
+            GrindstoneSupport,
+            BedrockBookApplySupport
         )
     }
 

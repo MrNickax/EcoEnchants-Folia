@@ -10,6 +10,8 @@ dependencies {
     compileOnly("net.essentialsx:EssentialsX:2.19.7") {
         exclude("*", "*")
     }
+    // Bedrock support: used only to detect Bedrock players and send native confirmation forms.
+    compileOnly("org.geysermc.floodgate:api:2.2.4-SNAPSHOT")
 }
 
 tasks {

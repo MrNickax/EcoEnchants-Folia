@@ -295,84 +295,92 @@ object AnvilSupport : Listener {
         event.result = null
         event.inventory.setItem(2, null)
 
-        /*
-        Compute the result synchronously within the event instead of in a deferred scheduler task.
+        player.scheduler.run {
+            if (latestPreviewGeneration[player.uniqueId] != generation) {
+                return@run
+            }
 
-        Bedrock clients (Geyser) render the anvil output client-side from the PrepareAnvilEvent
-        response and do not honour a result slot that is filled a tick later by a deferred task,
-        which left the output slot empty for them when applying custom enchantments. Setting
-        event.result synchronously means the result is carried by the event itself, which Geyser
-        translates correctly. Java behaviour is unchanged.
-         */
-        val left = event.inventory.getItem(0)?.clone()
-        val old = left?.clone()
-        val right = event.inventory.getItem(1)?.clone()
+            val left = event.inventory.getItem(0)?.clone()
+            val old = left?.clone()
+            val right = event.inventory.getItem(1)?.clone()
 
-        val result = doMerge(
-            left,
-            right,
-            @Suppress("REMOVAL", "DEPRECATION")
-            event.inventory.renameText ?: "",
-            player
-        )
+            val result = doMerge(
+                left,
+                right,
+                @Suppress("REMOVAL", "DEPRECATION")
+                event.inventory.renameText ?: "",
+                player
+            )
 
-        if (result == FAIL) {
-            return
+            if (result == FAIL) {
+                return@run
+            }
+
+            event.result = null
+            event.inventory.setItem(2, null)
+
+            val price = result.xp ?: 0
+            val outItem = result.result ?: ItemStack(Material.AIR)
+
+            val oldLeft = event.inventory.getItem(0)
+
+            if (oldLeft == null || oldLeft.type != outItem.type) {
+                return@run
+            }
+
+            if (left == old) {
+                return@run
+            }
+
+            var cost = baseRepairCost + price
+
+            // Unbelievably specific edge case
+            if (baseRepairCost == -price) {
+                cost = price
+            }
+
+            // Cost could be less than zero at times, so I include that here.
+            if (cost <= 0) {
+                return@run
+            }
+
+            /*
+            Transplanted anti-dupe bodge from pre-recode.
+             */
+            val leftEnchants = left?.fast()?.getEnchants(true) ?: emptyMap()
+            val outEnchants = outItem.fast().getEnchants(true)
+
+            if (event.inventory.getItem(1) == null && leftEnchants != outEnchants) {
+                return@run
+            }
+
+            if (plugin.configYml.getBool("anvil.use-rework-penalty")) {
+                val repairCost = outItem.fast().repairCost
+                outItem.fast().repairCost = (repairCost + 1) * 2 - 1
+            }
+
+            val clampRepairCost = plugin.configYml.getBool("anvil.clamp-repair-cost")
+            val maxRepairCost = plugin.configYml.getInt("anvil.max-repair-cost")
+
+            if (latestPreviewGeneration[player.uniqueId] != generation) {
+                return@run
+            }
+
+            event.view.maximumRepairCost = maxRepairCost
+            event.view.repairCost = if (clampRepairCost) cost.coerceAtMost(maxRepairCost) else cost
+
+            if (!clampRepairCost && maxRepairCost > 0 && cost >= maxRepairCost) {
+                return@run
+            }
+
+            if (latestPreviewGeneration[player.uniqueId] != generation) {
+                return@run
+            }
+
+            event.result = outItem
+            event.inventory.setItem(2, outItem)
+            renderedPreviewGeneration[player.uniqueId] = generation
         }
-
-        val price = result.xp ?: 0
-        val outItem = result.result ?: ItemStack(Material.AIR)
-
-        val oldLeft = event.inventory.getItem(0)
-
-        if (oldLeft == null || oldLeft.type != outItem.type) {
-            return
-        }
-
-        if (left == old) {
-            return
-        }
-
-        var cost = baseRepairCost + price
-
-        // Unbelievably specific edge case
-        if (baseRepairCost == -price) {
-            cost = price
-        }
-
-        // Cost could be less than zero at times, so I include that here.
-        if (cost <= 0) {
-            return
-        }
-
-        /*
-        Transplanted anti-dupe bodge from pre-recode.
-         */
-        val leftEnchants = left?.fast()?.getEnchants(true) ?: emptyMap()
-        val outEnchants = outItem.fast().getEnchants(true)
-
-        if (event.inventory.getItem(1) == null && leftEnchants != outEnchants) {
-            return
-        }
-
-        if (plugin.configYml.getBool("anvil.use-rework-penalty")) {
-            val repairCost = outItem.fast().repairCost
-            outItem.fast().repairCost = (repairCost + 1) * 2 - 1
-        }
-
-        val clampRepairCost = plugin.configYml.getBool("anvil.clamp-repair-cost")
-        val maxRepairCost = plugin.configYml.getInt("anvil.max-repair-cost")
-
-        event.view.maximumRepairCost = maxRepairCost
-        event.view.repairCost = if (clampRepairCost) cost.coerceAtMost(maxRepairCost) else cost
-
-        if (!clampRepairCost && maxRepairCost > 0 && cost >= maxRepairCost) {
-            return
-        }
-
-        event.result = outItem
-        event.inventory.setItem(2, outItem)
-        renderedPreviewGeneration[player.uniqueId] = generation
     }
 
     private fun doMerge(

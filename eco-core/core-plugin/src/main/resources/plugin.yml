@@ -12,6 +12,7 @@ softdepend:
   - libreforge
   - CMI
   - EssentialsX
+  - floodgate
 
 commands:
   ecoenchants:
