@@ -6,7 +6,7 @@ plugins {
     id("java-library")
     id("maven-publish")
     id("com.gradleup.shadow") version "9.3.1"
-    id("com.willfp.libreforge-gradle-plugin") version "2.0.0"
+    id("com.willfp.libreforge-gradle-plugin") version "2.0.1-folia"
 }
 
 group = "com.willfp"
@@ -36,6 +36,27 @@ allprojects {
     repositories {
         mavenLocal()
         mavenCentral()
+
+        // Folia forks published to GitHub Packages. Pin only the forked modules to these
+        // repos (by version -folia they never collide with upstream); every other
+        // com.willfp artifact (e.g. ModelEngineBridge) still resolves from auxilor below.
+        maven("https://maven.pkg.github.com/MrNickax/eco-folia") {
+            credentials {
+                username = System.getenv("GITHUB_ACTOR") ?: (findProperty("gpr.user") as String?)
+                password = System.getenv("GITHUB_TOKEN") ?: (findProperty("gpr.key") as String?)
+            }
+            content { includeModule("com.willfp", "eco") }
+        }
+        maven("https://maven.pkg.github.com/MrNickax/libreforge-folia") {
+            credentials {
+                username = System.getenv("GITHUB_ACTOR") ?: (findProperty("gpr.user") as String?)
+                password = System.getenv("GITHUB_TOKEN") ?: (findProperty("gpr.key") as String?)
+            }
+            content {
+                includeModule("com.willfp", "libreforge")
+                includeModule("com.willfp", "libreforge-loader")
+            }
+        }
 
         maven("https://repo.papermc.io/repository/maven-public/")
         maven("https://repo.auxilor.io/repository/maven-public/")

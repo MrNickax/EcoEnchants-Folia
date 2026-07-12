@@ -1,46 +1,47 @@
-<h1 align="center">
-  <br>
-  <img src="https://i.imgur.com/Tp22gUQ.png" alt="EcoEnchants logo" width="256">
-  <br>
-</h1>
+# EcoEnchants (Folia)
 
-<h4 align="center">Source code for EcoEnchants, a premium spigot plugin.</h4>
+> ⚠️ **Unofficial fork.** This is an independent fork of
+> [EcoEnchants](https://github.com/Auxilor/EcoEnchants), patched to run on **Folia**. It is not
+> affiliated with, endorsed by, or supported by Auxilor or the original EcoEnchants team.
 
-<p align="center">
-    <a href="https://polymart.org/resource/1-16-1-17-ecoenchants.490">
-        <img alt="spigot" src="https://img.shields.io/badge/polymart-ecoenchants-brightgreen?style=for-the-badge"/>
-    </a>
-    <a href="https://bstats.org/plugin/bukkit/EcoEnchants" alt="bstats servers">
-        <img src="https://img.shields.io/bstats/servers/7666?color=brightgreen&style=for-the-badge"/>
-    </a>
-    <a href="https://bstats.org/plugin/bukkit/EcoEnchants" alt="bstats players">
-        <img src="https://img.shields.io/bstats/players/7666?color=brightgreen&style=for-the-badge"/>
-    </a>
-    <a href="https://plugins.auxilor.io/ecoenchants" alt="Docs (gitbook)">
-        <img src="https://img.shields.io/badge/docs-gitbook-brightgreen?style=for-the-badge&logo=appveyor"/>
-    </a>
-    <a href="https://discord.gg/ZcwpSsE/" alt="Discord">
-        <img src="https://img.shields.io/discord/452518336627081236?label=discord&style=for-the-badge"/>
-    </a>
-</p>
+**EcoEnchants** adds a large set of custom enchantments to your server. This fork ports it to
+**Folia** (and Folia-based servers); all other functionality comes from the upstream project.
 
+## Disclaimer
 
-[![Title](https://i.imgur.com/3GMumz3.png)]()
-[![Features](https://i.imgur.com/vmSISa6.png)]()
-[![Docs](https://i.imgur.com/uS2O3ll.png)](https://plugins.auxilor.io/ecoenchants/all-enchantments)
-[![Compatibility](https://i.imgur.com/MxiF57Z.png)]()
+This software is provided **as is, without any warranty**. It is an unofficial adaptation
+maintained on my own, and **I take no responsibility for any bugs, crashes, data loss or damage**
+resulting from its use. Use it at your own risk, and always test in a controlled environment
+before deploying to production.
 
-## License
+Issues that also occur in the official version should be reported upstream — not blamed on this
+fork.
 
-*Click here to read [the entire license](https://github.com/Auxilor/EcoEnchants/blob/master/LICENSE.md).*
+## Installation
 
-<h1 align="center">
-  <br>
-    <a href="http://gamersupps.gg/discount/Auxilor?afmc=Auxilor" target="_blank">
-      <img src="https://i.imgur.com/uFDpBAC.png" alt="supps banner">
-    </a>
-    <a href="https://dedimc.promo/Auxilor" target="_blank">
-      <img src="https://i.imgur.com/zdDLhFA.png" alt="dedimc banner">
-    </a>
-  <br>
-</h1>
+1. Download the latest jar from the [releases page](https://github.com/MrNickax/EcoEnchants-Folia/releases).
+2. Drop it into your server's `plugins/` folder.
+3. Restart the server.
+
+This fork bundles its own Folia build of libreforge, so no separate libreforge install is needed.
+
+## Building
+
+This project consumes the Folia forks of [eco](https://github.com/MrNickax/eco-folia) and
+[libreforge](https://github.com/MrNickax/libreforge-folia) from **GitHub Packages**, which require
+a `read:packages` token even for public packages. Add your credentials to
+`~/.gradle/gradle.properties` (`gpr.user` / `gpr.key`) or the `GITHUB_ACTOR` / `GITHUB_TOKEN`
+environment variables, then:
+
+```bash
+git clone https://github.com/MrNickax/EcoEnchants-Folia
+cd EcoEnchants-Folia
+./gradlew build
+```
+
+The final plugin jar is produced in `bin/`.
+
+## Credits & license
+
+Based on [Auxilor/EcoEnchants](https://github.com/Auxilor/EcoEnchants). The original license terms
+are preserved — see [LICENSE.md](LICENSE.md).

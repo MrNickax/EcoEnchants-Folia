@@ -3,7 +3,17 @@ pluginManagement {
         maven("https://repo.papermc.io/repository/maven-public/")
         gradlePluginPortal()
         mavenLocal()
-        maven("https://repo.auxilor.io/repository/maven-public/")
+
+        // Folia libreforge-gradle-plugin (com.willfp.libreforge-gradle-plugin:*-folia).
+        maven("https://maven.pkg.github.com/MrNickax/libreforge-folia") {
+            credentials {
+                username = providers.environmentVariable("GITHUB_ACTOR").orNull
+                    ?: providers.gradleProperty("gpr.user").orNull
+                password = providers.environmentVariable("GITHUB_TOKEN").orNull
+                    ?: providers.gradleProperty("gpr.key").orNull
+            }
+            content { includeGroup("com.willfp") }
+        }
     }
 }
 
