@@ -9,7 +9,7 @@ on:
 
 permissions:
   contents: write   # create/update releases
-  packages: read    # read com.willfp:eco / libreforge* from GitHub Packages
+  packages: write   # read the forks + publish the EcoEnchants API
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -39,10 +39,28 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Publishes the com.willfp:EcoEnchants API artifact to GitHub Packages (for developers).
+      - name: Publish to GitHub Packages
+        if: github.event_name != 'pull_request'
+        run: ./gradlew publish --stacktrace
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Read version
         if: github.event_name != 'pull_request'
         id: version
         run: echo "value=$(sed -nE 's/^version[[:space:]]*=[[:space:]]*//p' gradle.properties | head -1)" >> "$GITHUB_OUTPUT"
+
+      # The libreforge gradle-plugin names the jar "<name> v<version>.jar"; use a dash instead.
+      - name: Rename plugin jar (space -> dash)
+        if: github.event_name != 'pull_request'
+        run: |
+          cd bin
+          for f in *.jar; do
+            new="${f// v/-v}"
+            [ "$f" != "$new" ] && mv -- "$f" "$new"
+          done
 
       # Attaches ONLY the final EcoEnchants plugin jar from bin/ to a release.
       - name: Publish jar to Releases
