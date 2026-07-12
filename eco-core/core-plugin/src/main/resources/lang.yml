@@ -15,6 +15,7 @@ messages:
   no-enchantments-found: "&cNo enchantments found!"
   invalid-levels: "&cMinimum level can't be higher than maximum level!"
   invalid-enchantment: "&cInvalid enchantment!"
+  invalid-item: "&cYou must hold a valid item in your main hand!"
   added-enchant: "&fAdded &a%enchant%&f to &a%player%&f's held item!"
   removed-enchant: "&fRemoved &a%enchant%&f from &a%player%&f's held item!"
 

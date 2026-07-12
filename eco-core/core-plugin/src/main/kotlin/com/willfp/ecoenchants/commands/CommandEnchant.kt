@@ -40,7 +40,10 @@ object CommandEnchant : PluginCommand(
 
         val item = player.inventory.itemInMainHand
 
-        val meta = item.itemMeta
+        val meta = notifyNull(
+            item.takeUnless { it.type.isAir }?.itemMeta,
+            "invalid-item"
+        )
 
         if (level > 0) {
             if (meta is EnchantmentStorageMeta) {
