@@ -12,7 +12,9 @@ pluginManagement {
                 password = providers.environmentVariable("GITHUB_TOKEN").orNull
                     ?: providers.gradleProperty("gpr.key").orNull
             }
-            content { includeGroup("com.willfp") }
+            // Covers both the plugin artifact (com.willfp:libreforge-gradle-plugin) and its
+            // marker (com.willfp.libreforge-gradle-plugin:*.gradle.plugin).
+            content { includeGroupByRegex("com\\.willfp.*") }
         }
     }
 }
