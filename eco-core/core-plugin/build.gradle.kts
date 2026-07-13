@@ -24,7 +24,8 @@ publishing {
     publications {
         create<MavenPublication>("shadow") {
             from(components["java"])
-            artifactId = rootProject.name
+            // Lowercase: GitHub Packages Maven rejects uppercase artifact ids with HTTP 422.
+            artifactId = rootProject.name.lowercase()
         }
     }
 
