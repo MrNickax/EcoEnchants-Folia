@@ -20,6 +20,7 @@ import org.bukkit.inventory.ItemStack
 import org.geysermc.cumulus.form.ModalForm
 import org.geysermc.floodgate.api.FloodgateApi
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.function.Consumer
 
 /**
@@ -49,10 +50,10 @@ object BedrockBookApplySupport : Listener {
         val enchants: Map<Enchantment, Int>
     )
 
-    private val pending = mutableMapOf<UUID, Pending>()
+    private val pending = ConcurrentHashMap<UUID, Pending>()
 
     // Debounce so the form is only offered once per distinct item+book combination.
-    private val promptedAnvilSignature = mutableMapOf<UUID, Int>()
+    private val promptedAnvilSignature = ConcurrentHashMap<UUID, Int>()
 
     private val floodgatePresent: Boolean by lazy {
         Bukkit.getPluginManager().getPlugin("floodgate") != null

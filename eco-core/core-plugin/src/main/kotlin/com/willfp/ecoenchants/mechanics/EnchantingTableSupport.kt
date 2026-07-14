@@ -19,6 +19,7 @@ import org.bukkit.event.enchantment.PrepareItemEnchantEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.inventory.meta.EnchantmentStorageMeta
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.min
@@ -224,7 +225,7 @@ object EnchantingTableSupport : Listener {
 }
 
 object ExtraItemSupport {
-    internal val currentlyEnchantingExtraItem = mutableMapOf<UUID, Array<Int>>()
+    internal val currentlyEnchantingExtraItem = ConcurrentHashMap<UUID, Array<Int>>()
 
     internal val extraEnchantableItems = mutableListOf<TestableItem>()
 

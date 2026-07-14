@@ -21,6 +21,7 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.Damageable
 import org.bukkit.inventory.meta.EnchantmentStorageMeta
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
@@ -206,9 +207,9 @@ object AnvilSupport : Listener {
         }
     }
 
-    private val latestPreviewGeneration = mutableMapOf<UUID, Int>()
+    private val latestPreviewGeneration = ConcurrentHashMap<UUID, Int>()
 
-    private val renderedPreviewGeneration = mutableMapOf<UUID, Int>()
+    private val renderedPreviewGeneration = ConcurrentHashMap<UUID, Int>()
 
     /**
      * Class for AnvilGUI wrappers to ignore them.
