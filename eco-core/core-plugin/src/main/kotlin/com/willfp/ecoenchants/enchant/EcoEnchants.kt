@@ -6,10 +6,6 @@ import com.willfp.ecoenchants.EcoEnchantsPlugin
 import com.willfp.ecoenchants.display.getFormattedName
 import com.willfp.ecoenchants.enchant.impl.EcoEnchantBase
 import com.willfp.ecoenchants.enchant.impl.LibreforgeEcoEnchant
-import com.willfp.ecoenchants.enchant.impl.hardcoded.EnchantmentPermanenceCurse
-import com.willfp.ecoenchants.enchant.impl.hardcoded.EnchantmentRepairing
-import com.willfp.ecoenchants.enchant.impl.hardcoded.EnchantmentReplenish
-import com.willfp.ecoenchants.enchant.impl.hardcoded.EnchantmentSoulbound
 import com.willfp.ecoenchants.enchant.registration.ModernEnchantmentRegistererProxy
 import com.willfp.ecoenchants.integrations.EnchantRegistrations
 import com.willfp.ecoenchants.plugin
@@ -48,7 +44,6 @@ object EcoEnchants : RegistrableCategory<EcoEnchant>("enchant", "enchants") {
 
     override fun afterReload(plugin: LibreforgePlugin) {
         sendPrompts()
-        registerHardcodedEnchantments()
 
         plugin.getProxy(ModernEnchantmentRegistererProxy::class.java).freezeRegistry()
     }
@@ -98,22 +93,6 @@ object EcoEnchants : RegistrableCategory<EcoEnchant>("enchant", "enchants") {
         @Suppress("DEPRECATION")
         BY_NAME[ChatColor.stripColor(enchant.getFormattedName(0))?.lowercase()] = enchantment as EcoEnchant
         EnchantRegistrations.registerEnchantments()
-    }
-
-    private fun registerHardcodedEnchantments() {
-        val hardcodedEnchantments = listOf(
-            EnchantmentPermanenceCurse,
-            EnchantmentRepairing,
-            EnchantmentReplenish,
-            EnchantmentSoulbound
-        )
-
-        for (enchantment in hardcodedEnchantments) {
-            // Only register if not already registered (so hardcode can be overridden)
-            if (enchantment.isPresent && registry[enchantment.id] == null) {
-                doRegister(enchantment)
-            }
-        }
     }
 
     fun getByName(name: String?): EcoEnchant? {
