@@ -227,7 +227,7 @@ object EnchantingTableSupport : Listener {
 object ExtraItemSupport {
     internal val currentlyEnchantingExtraItem = ConcurrentHashMap<UUID, Array<Int>>()
 
-    internal val extraEnchantableItems = mutableListOf<TestableItem>()
+    internal val extraEnchantableItems = java.util.concurrent.CopyOnWriteArrayList<TestableItem>()
 
     internal fun reload() {
         extraEnchantableItems.clear()
