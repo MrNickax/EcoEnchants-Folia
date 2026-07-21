@@ -1,0 +1,4317 @@
+diff --git a/build.gradle.kts b/build.gradle.kts
+index 01789304..4c64455d 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -1,17 +1,18 @@
+ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+ 
+ plugins {
+-    java
+-    `java-library`
+-    `maven-publish`
+-    kotlin("jvm") version "2.1.0"
+-    id("com.gradleup.shadow") version "8.3.5"
+-    id("com.willfp.libreforge-gradle-plugin") version "1.0.0"
++    kotlin("jvm") version "2.3.0"
++    id("java")
++    id("java-library")
++    id("maven-publish")
++    id("com.gradleup.shadow") version "9.3.1"
++    id("com.willfp.libreforge-gradle-plugin") version "2.0.1-folia"
+ }
+ 
+ group = "com.willfp"
+ version = findProperty("version")!!
+ val libreforgeVersion = findProperty("libreforge-version")
++val ecoVersion = findProperty("eco-version")
+ 
+ base {
+     archivesName.set(project.name)
+@@ -19,12 +20,11 @@ base {
+ 
+ dependencies {
+     implementation(project(":eco-core:core-plugin"))
+-    implementation(project(":eco-core:core-nms:v1_21_4", configuration = "reobf"))
+-    implementation(project(":eco-core:core-nms:v1_21_5", configuration = "reobf"))
+-    implementation(project(":eco-core:core-nms:v1_21_6", configuration = "reobf"))
+-    implementation(project(":eco-core:core-nms:v1_21_7", configuration = "reobf"))
+     implementation(project(":eco-core:core-nms:v1_21_8", configuration = "reobf"))
+     implementation(project(":eco-core:core-nms:v1_21_10", configuration = "reobf"))
++    implementation(project(":eco-core:core-nms:v1_21_11", configuration = "reobf"))
++    implementation(project(":eco-core:core-nms:v26_1_1", configuration = "shadow"))
++    implementation(project(":eco-core:core-nms:v26_1_2", configuration = "shadow"))
+ }
+ 
+ allprojects {
+@@ -37,27 +37,53 @@ allprojects {
+         mavenLocal()
+         mavenCentral()
+ 
++        // Folia forks published to GitHub Packages. Pin only the forked modules to these
++        // repos (by version -folia they never collide with upstream); every other
++        // com.willfp artifact (e.g. ModelEngineBridge) still resolves from auxilor below.
++        maven("https://maven.pkg.github.com/MrNickax/eco-folia") {
++            credentials {
++                username = System.getenv("GITHUB_ACTOR") ?: (findProperty("gpr.user") as String?)
++                password = System.getenv("GITHUB_TOKEN") ?: (findProperty("gpr.key") as String?)
++            }
++            content { includeModule("com.willfp", "eco") }
++        }
++        maven("https://maven.pkg.github.com/MrNickax/libreforge-folia") {
++            credentials {
++                username = System.getenv("GITHUB_ACTOR") ?: (findProperty("gpr.user") as String?)
++                password = System.getenv("GITHUB_TOKEN") ?: (findProperty("gpr.key") as String?)
++            }
++            content {
++                includeModule("com.willfp", "libreforge")
++                includeModule("com.willfp", "libreforge-loader")
++            }
++        }
++
+         maven("https://repo.papermc.io/repository/maven-public/")
+         maven("https://repo.auxilor.io/repository/maven-public/")
+         maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
+         maven("https://repo.codemc.org/repository/nms/")
+         maven("https://repo.essentialsx.net/releases/")
+-
++        maven("https://repo.opencollab.dev/main/")
+         maven("https://jitpack.io") {
+             content { includeGroupByRegex("com\\.github\\..*") }
+         }
+     }
+ 
+     dependencies {
+-        compileOnly("com.willfp:eco:6.77.0")
+-        compileOnly("org.jetbrains:annotations:23.0.0")
+-        compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.1.0")
+-        compileOnly("com.github.ben-manes.caffeine:caffeine:3.1.5")
++        compileOnly("com.willfp:eco:$ecoVersion")
++        compileOnly("org.jetbrains:annotations:26.0.2")
++        compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.3.0")
++        compileOnly("com.github.ben-manes.caffeine:caffeine:3.2.3")
+     }
+ 
+     tasks {
+         shadowJar {
++            exclude("META-INF/**")
+             relocate("com.willfp.libreforge.loader", "com.willfp.ecoenchants.libreforge.loader")
++            relocate("kotlin", "com.willfp.eco.libs.kotlin")
++            relocate("kotlin.jvm", "com.willfp.eco.libs.kotlin.jvm")
++            relocate("kotlin.coroutines", "com.willfp.eco.libs.kotlin.coroutines")
++            relocate("kotlin.reflect", "com.willfp.eco.libs.kotlin.reflect")
+         }
+ 
+         compileKotlin {
+@@ -77,7 +103,7 @@ allprojects {
+             filesMatching(listOf("**plugin.yml", "**eco.yml")) {
+                 expand(
+                     "version" to project.version,
+-                    "libreforgeVersion" to libreforgeVersion,
++                    "libreforgeVersion" to libreforgeVersion!!,
+                     "pluginName" to rootProject.name
+                 )
+             }
+@@ -95,7 +121,7 @@ allprojects {
+     java {
+         withSourcesJar()
+         toolchain {
+-            languageVersion = JavaLanguageVersion.of(21)
++            languageVersion = JavaLanguageVersion.of(25)
+         }
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/build.gradle.kts b/eco-core/build.gradle.kts
+index 5f8f296f..48fdde0d 100644
+--- a/eco-core/build.gradle.kts
++++ b/eco-core/build.gradle.kts
+@@ -1,2 +1,2 @@
+ group = "com.willfp"
+-version = rootProject.version
++version = rootProject.version
+\ No newline at end of file
+diff --git a/eco-core/core-nms/build.gradle.kts b/eco-core/core-nms/build.gradle.kts
+index 5ea16efd..3fee4f2c 100644
+--- a/eco-core/core-nms/build.gradle.kts
++++ b/eco-core/core-nms/build.gradle.kts
+@@ -1,5 +1,5 @@
+ plugins {
+-    id("io.papermc.paperweight.userdev") version "2.0.0-beta.17" apply false
++    id("io.papermc.paperweight.userdev") version "2.0.0-beta.21" apply false
+ }
+ 
+ group = "com.willfp"
+diff --git a/eco-core/core-nms/v1_21_10/build.gradle.kts b/eco-core/core-nms/v1_21_10/build.gradle.kts
+index 97fba298..eb381528 100644
+--- a/eco-core/core-nms/v1_21_10/build.gradle.kts
++++ b/eco-core/core-nms/v1_21_10/build.gradle.kts
+@@ -6,7 +6,8 @@ group = "com.willfp"
+ version = rootProject.version
+ 
+ dependencies {
+-    implementation(project(":eco-core:core-nms:v1_21_4", configuration = "shadow"))
++    implementation(project(":eco-core:core-nms:v1_21_8", configuration = "shadow"))
++    implementation("net.kyori:adventure-text-serializer-ansi:4.18.0")
+     paperweight.paperDevBundle("1.21.10-R0.1-SNAPSHOT")
+ }
+ 
+@@ -21,8 +22,14 @@ tasks {
+ 
+     shadowJar {
+         relocate(
+-            "com.willfp.ecoenchants.proxy.v1_21_4",
++            "com.willfp.ecoenchants.proxy.v1_21_8",
+             "com.willfp.ecoenchants.proxy.v1_21_10",
+         )
+     }
+ }
++
++java {
++    toolchain {
++        languageVersion = JavaLanguageVersion.of(21)
++    }
++}
+\ No newline at end of file
+diff --git a/eco-core/core-nms/v1_21_11/build.gradle.kts b/eco-core/core-nms/v1_21_11/build.gradle.kts
+new file mode 100644
+index 00000000..daabdd49
+--- /dev/null
++++ b/eco-core/core-nms/v1_21_11/build.gradle.kts
+@@ -0,0 +1,40 @@
++plugins {
++    id("io.papermc.paperweight.userdev")
++}
++
++group = "com.willfp"
++version = rootProject.version
++
++dependencies {
++    implementation(project(":eco-core:core-nms:v1_21_8", configuration = "shadow"))
++    compileOnly("net.kyori:adventure-text-serializer-ansi:4.18.0")
++    paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
++}
++
++tasks {
++    build {
++        dependsOn(reobfJar)
++    }
++
++    reobfJar {
++        mustRunAfter(shadowJar)
++    }
++
++    shadowJar {
++        relocate(
++            "com.willfp.ecoenchants.proxy.v1_21_8",
++            "com.willfp.ecoenchants.proxy.v1_21_11",
++        )
++
++        exclude("com/willfp/ecoenchants/proxy/v1_21_8/ModernEnchantmentRegisterer*.class")
++        exclude("com/willfp/ecoenchants/proxy/v1_21_8/registration/VanillaEcoEnchantsEnchantment*.class")
++
++        duplicatesStrategy = DuplicatesStrategy.FAIL
++    }
++}
++
++java {
++    toolchain {
++        languageVersion = JavaLanguageVersion.of(21)
++    }
++}
+\ No newline at end of file
+diff --git a/eco-core/core-nms/v1_21_11/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_11/ModernEnchantmentRegisterer.kt b/eco-core/core-nms/v1_21_11/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_11/ModernEnchantmentRegisterer.kt
+new file mode 100644
+index 00000000..c7ba71f4
+--- /dev/null
++++ b/eco-core/core-nms/v1_21_11/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_11/ModernEnchantmentRegisterer.kt
+@@ -0,0 +1,151 @@
++package com.willfp.ecoenchants.proxy.v1_21_11
++
++import com.willfp.ecoenchants.enchant.EcoEnchant
++import com.willfp.ecoenchants.enchant.EcoEnchants
++import com.willfp.ecoenchants.enchant.impl.EcoEnchantBase
++import com.willfp.ecoenchants.enchant.registration.ModernEnchantmentRegistererProxy
++import com.willfp.ecoenchants.proxy.v1_21_11.registration.vanillaEcoEnchantsEnchantment
++import com.willfp.ecoenchants.proxy.v1_21_8.registration.EcoEnchantsCraftEnchantment
++import com.willfp.ecoenchants.proxy.v1_21_8.registration.ModifiedVanillaCraftEnchantment
++import io.papermc.paper.registry.entry.RegistryTypeMapper
++import io.papermc.paper.registry.legacy.DelayedRegistry
++import net.minecraft.core.Holder
++import net.minecraft.core.MappedRegistry
++import net.minecraft.core.Registry
++import net.minecraft.core.registries.Registries
++import net.minecraft.resources.Identifier
++import org.bukkit.Bukkit
++import org.bukkit.NamespacedKey
++import org.bukkit.craftbukkit.CraftRegistry
++import org.bukkit.craftbukkit.CraftServer
++import org.bukkit.craftbukkit.util.CraftNamespacedKey
++import org.bukkit.enchantments.Enchantment
++import java.lang.reflect.Modifier
++import java.util.IdentityHashMap
++import java.util.function.BiFunction
++
++private val enchantmentRegistry =
++    (Bukkit.getServer() as CraftServer).server.registryAccess().lookupOrThrow(Registries.ENCHANTMENT)
++
++@Suppress("DEPRECATION")
++private val bukkitRegistry: org.bukkit.Registry<Enchantment>
++    get() =
++        (org.bukkit.Registry.ENCHANTMENT as DelayedRegistry<Enchantment, *>).delegate()
++
++class ModernEnchantmentRegisterer : ModernEnchantmentRegistererProxy {
++    private val frozenField = MappedRegistry::class.java
++        .getDeclaredField("frozen")
++        .apply { isAccessible = true }
++
++    private val allTags = MappedRegistry::class.java
++        .getDeclaredField("allTags")
++        .apply { isAccessible = true }
++
++    private val unregisteredIntrusiveHoldersField = MappedRegistry::class.java
++        .getDeclaredField("unregisteredIntrusiveHolders")
++        .apply { isAccessible = true }
++
++    private val minecraftToBukkit = CraftRegistry::class.java
++        .getDeclaredField("minecraftToBukkit")
++        .apply { isAccessible = true }
++
++    private val cache = CraftRegistry::class.java
++        .getDeclaredField("cache")
++        .apply { isAccessible = true }
++
++    override fun replaceRegistry() {
++        val newRegistryMTB =
++            BiFunction<NamespacedKey, net.minecraft.world.item.enchantment.Enchantment, Enchantment?> { key, registry ->
++                val eco = EcoEnchants.getByID(key.key)
++                val isRegistered = enchantmentRegistry.containsKey(CraftNamespacedKey.toMinecraft(key))
++
++                if (eco != null) {
++                    eco as Enchantment
++                } else if (isRegistered) {
++                    val holder = enchantmentRegistry.get(CraftNamespacedKey.toMinecraft(key)).get()
++
++                    ModifiedVanillaCraftEnchantment(key, registry, holder)
++                } else {
++                    null
++                }
++            }
++
++        // Update bukkit registry
++        // The nasty casting hack is because of some weird nullability changes, if I set the BiFunction to have a
++        // non-nullable bukkit enchantment type then it refuses to build, some sort of K2 compiler change.
++        @Suppress("UNCHECKED_CAST")
++        minecraftToBukkit.set(
++            bukkitRegistry,
++            RegistryTypeMapper(newRegistryMTB as BiFunction<NamespacedKey, net.minecraft.world.item.enchantment.Enchantment, Enchantment>)
++        )
++
++        // Clear the enchantment cache
++        cache.set(bukkitRegistry, mutableMapOf<NamespacedKey, Enchantment>())
++
++        // Unfreeze NMS registry
++        frozenField.set(enchantmentRegistry, false)
++        unregisteredIntrusiveHoldersField.set(
++            enchantmentRegistry,
++            IdentityHashMap<net.minecraft.world.item.enchantment.Enchantment,
++                    Holder.Reference<net.minecraft.world.item.enchantment.Enchantment>>()
++        )
++
++        /*
++        Creating an unbound tag set requires using reflection because the inner class is
++        package-private, so we just find the method manually.
++         */
++
++        val unboundTagSet = MappedRegistry::class.java
++            .declaredClasses[0]
++            .declaredMethods
++            .filter { Modifier.isStatic(it.modifiers) }
++            .filter { it.parameterCount == 0 }[0]
++            .apply { isAccessible = true }
++            .invoke(null)
++
++        allTags.set(enchantmentRegistry, unboundTagSet)
++    }
++
++    override fun freezeRegistry() {
++        enchantmentRegistry.freeze()
++    }
++
++    override fun register(enchant: EcoEnchantBase): Enchantment {
++        // Clear the enchantment cache
++        cache.set(bukkitRegistry, mutableMapOf<NamespacedKey, Enchantment>())
++
++        if (enchantmentRegistry.containsKey(CraftNamespacedKey.toMinecraft(enchant.enchantmentKey))) {
++            val nms = enchantmentRegistry[CraftNamespacedKey.toMinecraft(enchant.enchantmentKey)]
++
++            if (nms.isPresent) {
++                return EcoEnchantsCraftEnchantment(enchant, nms.get())
++            } else {
++                throw IllegalStateException("Enchantment ${enchant.id} wasn't registered")
++            }
++        }
++
++        val vanillaEnchantment = vanillaEcoEnchantsEnchantment(enchant)
++
++        enchantmentRegistry.createIntrusiveHolder(vanillaEnchantment)
++
++        Registry.register(
++            enchantmentRegistry,
++            Identifier.withDefaultNamespace(enchant.id),
++            vanillaEnchantment
++        )
++
++        val holder = enchantmentRegistry[CraftNamespacedKey.toMinecraft(enchant.enchantmentKey)]
++            .orElseThrow { IllegalStateException("Enchantment ${enchant.id} wasn't registered") }
++
++        return EcoEnchantsCraftEnchantment(enchant, holder)
++    }
++
++    override fun unregister(enchant: EcoEnchant) {
++        /*
++
++        You can't unregister from a minecraft registry, so we simply leave the stale reference there.
++        This shouldn't cause many issues in production as the bukkit registry is replaced on each reload.
++
++         */
++    }
++}
+diff --git a/eco-core/core-nms/v1_21_11/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_11/registration/VanillaEcoEnchantsEnchantment.kt b/eco-core/core-nms/v1_21_11/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_11/registration/VanillaEcoEnchantsEnchantment.kt
+new file mode 100644
+index 00000000..5d06c0a7
+--- /dev/null
++++ b/eco-core/core-nms/v1_21_11/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_11/registration/VanillaEcoEnchantsEnchantment.kt
+@@ -0,0 +1,21 @@
++package com.willfp.ecoenchants.proxy.v1_21_11.registration
++
++import com.willfp.ecoenchants.enchant.EcoEnchant
++import net.minecraft.core.HolderSet
++import net.minecraft.resources.Identifier
++import net.minecraft.world.item.enchantment.Enchantment
++
++fun vanillaEcoEnchantsEnchantment(enchant: EcoEnchant): Enchantment {
++    val enchantment = Enchantment.enchantment(
++        Enchantment.definition(
++            HolderSet.empty(),
++            1, // 1.21 hardcodes a minimum weight of 1
++            enchant.maximumLevel,
++            Enchantment.constantCost(1),
++            Enchantment.constantCost(1),
++            0
++        )
++    )
++
++    return enchantment.build(Identifier.withDefaultNamespace(enchant.id))
++}
+diff --git a/eco-core/core-nms/v1_21_4/build.gradle.kts b/eco-core/core-nms/v1_21_4/build.gradle.kts
+deleted file mode 100644
+index f027517d..00000000
+--- a/eco-core/core-nms/v1_21_4/build.gradle.kts
++++ /dev/null
+@@ -1,20 +0,0 @@
+-plugins {
+-    id("io.papermc.paperweight.userdev")
+-}
+-
+-group = "com.willfp"
+-version = rootProject.version
+-
+-dependencies {
+-    paperweight.paperDevBundle("1.21.4-R0.1-SNAPSHOT")
+-}
+-
+-tasks {
+-    build {
+-        dependsOn(reobfJar)
+-    }
+-
+-    reobfJar {
+-        mustRunAfter(shadowJar)
+-    }
+-}
+diff --git a/eco-core/core-nms/v1_21_5/build.gradle.kts b/eco-core/core-nms/v1_21_5/build.gradle.kts
+deleted file mode 100644
+index 8b718f0e..00000000
+--- a/eco-core/core-nms/v1_21_5/build.gradle.kts
++++ /dev/null
+@@ -1,28 +0,0 @@
+-plugins {
+-    id("io.papermc.paperweight.userdev")
+-}
+-
+-group = "com.willfp"
+-version = rootProject.version
+-
+-dependencies {
+-    implementation(project(":eco-core:core-nms:v1_21_4", configuration = "shadow"))
+-    paperweight.paperDevBundle("1.21.5-R0.1-SNAPSHOT")
+-}
+-
+-tasks {
+-    build {
+-        dependsOn(reobfJar)
+-    }
+-
+-    reobfJar {
+-        mustRunAfter(shadowJar)
+-    }
+-
+-    shadowJar {
+-        relocate(
+-            "com.willfp.ecoenchants.proxy.v1_21_4",
+-            "com.willfp.ecoenchants.proxy.v1_21_5",
+-        )
+-    }
+-}
+diff --git a/eco-core/core-nms/v1_21_6/build.gradle.kts b/eco-core/core-nms/v1_21_6/build.gradle.kts
+deleted file mode 100644
+index 7f7aa0e2..00000000
+--- a/eco-core/core-nms/v1_21_6/build.gradle.kts
++++ /dev/null
+@@ -1,28 +0,0 @@
+-plugins {
+-    id("io.papermc.paperweight.userdev")
+-}
+-
+-group = "com.willfp"
+-version = rootProject.version
+-
+-dependencies {
+-    implementation(project(":eco-core:core-nms:v1_21_4", configuration = "shadow"))
+-    paperweight.paperDevBundle("1.21.6-R0.1-SNAPSHOT")
+-}
+-
+-tasks {
+-    build {
+-        dependsOn(reobfJar)
+-    }
+-
+-    reobfJar {
+-        mustRunAfter(shadowJar)
+-    }
+-
+-    shadowJar {
+-        relocate(
+-            "com.willfp.ecoenchants.proxy.v1_21_4",
+-            "com.willfp.ecoenchants.proxy.v1_21_6",
+-        )
+-    }
+-}
+diff --git a/eco-core/core-nms/v1_21_7/build.gradle.kts b/eco-core/core-nms/v1_21_7/build.gradle.kts
+deleted file mode 100644
+index bf1e5f2a..00000000
+--- a/eco-core/core-nms/v1_21_7/build.gradle.kts
++++ /dev/null
+@@ -1,28 +0,0 @@
+-plugins {
+-    id("io.papermc.paperweight.userdev")
+-}
+-
+-group = "com.willfp"
+-version = rootProject.version
+-
+-dependencies {
+-    implementation(project(":eco-core:core-nms:v1_21_4", configuration = "shadow"))
+-    paperweight.paperDevBundle("1.21.7-R0.1-SNAPSHOT")
+-}
+-
+-tasks {
+-    build {
+-        dependsOn(reobfJar)
+-    }
+-
+-    reobfJar {
+-        mustRunAfter(shadowJar)
+-    }
+-
+-    shadowJar {
+-        relocate(
+-            "com.willfp.ecoenchants.proxy.v1_21_4",
+-            "com.willfp.ecoenchants.proxy.v1_21_7",
+-        )
+-    }
+-}
+diff --git a/eco-core/core-nms/v1_21_8/build.gradle.kts b/eco-core/core-nms/v1_21_8/build.gradle.kts
+index 597b7ee4..d6718e5a 100644
+--- a/eco-core/core-nms/v1_21_8/build.gradle.kts
++++ b/eco-core/core-nms/v1_21_8/build.gradle.kts
+@@ -6,7 +6,7 @@ group = "com.willfp"
+ version = rootProject.version
+ 
+ dependencies {
+-    implementation(project(":eco-core:core-nms:v1_21_4", configuration = "shadow"))
++    implementation("net.kyori:adventure-text-serializer-ansi:4.18.0")
+     paperweight.paperDevBundle("1.21.8-R0.1-SNAPSHOT")
+ }
+ 
+@@ -18,11 +18,10 @@ tasks {
+     reobfJar {
+         mustRunAfter(shadowJar)
+     }
++}
+ 
+-    shadowJar {
+-        relocate(
+-            "com.willfp.ecoenchants.proxy.v1_21_4",
+-            "com.willfp.ecoenchants.proxy.v1_21_8",
+-        )
++java {
++    toolchain {
++        languageVersion = JavaLanguageVersion.of(21)
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/HideStoredEnchants.kt b/eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/HideStoredEnchants.kt
+similarity index 91%
+rename from eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/HideStoredEnchants.kt
+rename to eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/HideStoredEnchants.kt
+index d3e67589..8906bd4f 100644
+--- a/eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/HideStoredEnchants.kt
++++ b/eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/HideStoredEnchants.kt
+@@ -1,10 +1,9 @@
+-package com.willfp.ecoenchants.proxy.v1_21_4
++package com.willfp.ecoenchants.proxy.v1_21_8
+ 
+ import com.willfp.eco.core.Prerequisite
+ import com.willfp.eco.core.fast.FastItemStack
+ import com.willfp.ecoenchants.display.HideStoredEnchantsProxy
+ import org.bukkit.inventory.ItemFlag
+-import javax.print.attribute.PrintRequestAttribute
+ 
+ class HideStoredEnchants: HideStoredEnchantsProxy {
+     override fun hideStoredEnchants(fis: FastItemStack) {
+diff --git a/eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/ModernEnchantmentRegisterer.kt b/eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/ModernEnchantmentRegisterer.kt
+new file mode 100644
+index 00000000..32d750c1
+--- /dev/null
++++ b/eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/ModernEnchantmentRegisterer.kt
+@@ -0,0 +1,152 @@
++package com.willfp.ecoenchants.proxy.v1_21_8
++
++import com.willfp.ecoenchants.enchant.EcoEnchant
++import com.willfp.ecoenchants.enchant.EcoEnchants
++import com.willfp.ecoenchants.enchant.impl.EcoEnchantBase
++import com.willfp.ecoenchants.enchant.registration.ModernEnchantmentRegistererProxy
++import com.willfp.ecoenchants.proxy.v1_21_8.registration.EcoEnchantsCraftEnchantment
++import com.willfp.ecoenchants.proxy.v1_21_8.registration.ModifiedVanillaCraftEnchantment
++import com.willfp.ecoenchants.proxy.v1_21_8.registration.vanillaEcoEnchantsEnchantment
++import io.papermc.paper.registry.entry.RegistryTypeMapper
++import io.papermc.paper.registry.legacy.DelayedRegistry
++import net.minecraft.core.Holder
++import net.minecraft.core.MappedRegistry
++import net.minecraft.core.Registry
++import net.minecraft.core.registries.Registries
++import net.minecraft.resources.ResourceLocation
++import org.bukkit.Bukkit
++import org.bukkit.NamespacedKey
++import org.bukkit.craftbukkit.CraftRegistry
++import org.bukkit.craftbukkit.CraftServer
++import org.bukkit.craftbukkit.util.CraftNamespacedKey
++import org.bukkit.enchantments.Enchantment
++import java.lang.reflect.Modifier
++import java.util.IdentityHashMap
++import java.util.function.BiFunction
++
++
++private val enchantmentRegistry =
++    (Bukkit.getServer() as CraftServer).server.registryAccess().lookupOrThrow(Registries.ENCHANTMENT)
++
++@Suppress("DEPRECATION")
++private val bukkitRegistry: org.bukkit.Registry<Enchantment>
++    get() =
++        (org.bukkit.Registry.ENCHANTMENT as DelayedRegistry<Enchantment, *>).delegate()
++
++class ModernEnchantmentRegisterer : ModernEnchantmentRegistererProxy {
++    private val frozenField = MappedRegistry::class.java
++        .getDeclaredField("frozen")
++        .apply { isAccessible = true }
++
++    private val allTags = MappedRegistry::class.java
++        .getDeclaredField("allTags")
++        .apply { isAccessible = true }
++
++    private val unregisteredIntrusiveHoldersField = MappedRegistry::class.java
++        .getDeclaredField("unregisteredIntrusiveHolders")
++        .apply { isAccessible = true }
++
++    private val minecraftToBukkit = CraftRegistry::class.java
++        .getDeclaredField("minecraftToBukkit")
++        .apply { isAccessible = true }
++
++    private val cache = CraftRegistry::class.java
++        .getDeclaredField("cache")
++        .apply { isAccessible = true }
++
++    override fun replaceRegistry() {
++        val newRegistryMTB =
++            BiFunction<NamespacedKey, net.minecraft.world.item.enchantment.Enchantment, Enchantment?> { key, registry ->
++                val eco = EcoEnchants.getByID(key.key)
++                val isRegistered = enchantmentRegistry.containsKey(CraftNamespacedKey.toMinecraft(key))
++
++                if (eco != null) {
++                    eco as Enchantment
++                } else if (isRegistered) {
++                    val holder = enchantmentRegistry.get(CraftNamespacedKey.toMinecraft(key)).get()
++
++                    ModifiedVanillaCraftEnchantment(key, registry, holder)
++                } else {
++                    null
++                }
++            }
++
++        // Update bukkit registry
++        // The nasty casting hack is because of some weird nullability changes, if I set the BiFunction to have a
++        // non-nullable bukkit enchantment type then it refuses to build, some sort of K2 compiler change.
++        @Suppress("UNCHECKED_CAST")
++        minecraftToBukkit.set(
++            bukkitRegistry,
++            RegistryTypeMapper(newRegistryMTB as BiFunction<NamespacedKey, net.minecraft.world.item.enchantment.Enchantment, Enchantment>)
++        )
++
++        // Clear the enchantment cache
++        cache.set(bukkitRegistry, mutableMapOf<NamespacedKey, Enchantment>())
++
++        // Unfreeze NMS registry
++        frozenField.set(enchantmentRegistry, false)
++        unregisteredIntrusiveHoldersField.set(
++            enchantmentRegistry,
++            IdentityHashMap<net.minecraft.world.item.enchantment.Enchantment,
++                    Holder.Reference<net.minecraft.world.item.enchantment.Enchantment>>()
++        )
++
++        /*
++        Creating an unbound tag set requires using reflection because the inner class is
++        package-private, so we just find the method manually.
++         */
++
++        val unboundTagSet = MappedRegistry::class.java
++            .declaredClasses[0]
++            .declaredMethods
++            .filter { Modifier.isStatic(it.modifiers) }
++            .filter { it.parameterCount == 0 }[0]
++            .apply { isAccessible = true }
++            .invoke(null)
++
++        allTags.set(enchantmentRegistry, unboundTagSet)
++    }
++
++    override fun freezeRegistry() {
++        enchantmentRegistry.freeze()
++    }
++
++    override fun register(enchant: EcoEnchantBase): Enchantment {
++        // Clear the enchantment cache
++        cache.set(bukkitRegistry, mutableMapOf<NamespacedKey, Enchantment>())
++
++        if (enchantmentRegistry.containsKey(CraftNamespacedKey.toMinecraft(enchant.enchantmentKey))) {
++            val nms = enchantmentRegistry[CraftNamespacedKey.toMinecraft(enchant.enchantmentKey)]
++
++            if (nms.isPresent) {
++                return EcoEnchantsCraftEnchantment(enchant, nms.get())
++            } else {
++                throw IllegalStateException("Enchantment ${enchant.id} wasn't registered")
++            }
++        }
++
++        val vanillaEnchantment = vanillaEcoEnchantsEnchantment(enchant)
++
++        enchantmentRegistry.createIntrusiveHolder(vanillaEnchantment)
++
++        Registry.register(
++            enchantmentRegistry,
++            ResourceLocation.withDefaultNamespace(enchant.id),
++            vanillaEnchantment
++        )
++
++        val holder = enchantmentRegistry[CraftNamespacedKey.toMinecraft(enchant.enchantmentKey)]
++            .orElseThrow { IllegalStateException("Enchantment ${enchant.id} wasn't registered") }
++
++        return EcoEnchantsCraftEnchantment(enchant, holder)
++    }
++
++    override fun unregister(enchant: EcoEnchant) {
++        /*
++
++        You can't unregister from a minecraft registry, so we simply leave the stale reference there.
++        This shouldn't cause many issues in production as the bukkit registry is replaced on each reload.
++
++         */
++    }
++}
+diff --git a/eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/OpenInventory.kt b/eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/OpenInventory.kt
+similarity index 87%
+rename from eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/OpenInventory.kt
+rename to eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/OpenInventory.kt
+index bee14bc7..39b6f996 100644
+--- a/eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/OpenInventory.kt
++++ b/eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/OpenInventory.kt
+@@ -1,4 +1,4 @@
+-package com.willfp.ecoenchants.proxy.v1_21_4
++package com.willfp.ecoenchants.proxy.v1_21_8
+ 
+ import com.willfp.ecoenchants.mechanics.OpenInventoryProxy
+ import org.bukkit.craftbukkit.entity.CraftPlayer
+diff --git a/eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/registration/EcoEnchantsCraftEnchantment.kt b/eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/registration/EcoEnchantsCraftEnchantment.kt
+similarity index 97%
+rename from eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/registration/EcoEnchantsCraftEnchantment.kt
+rename to eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/registration/EcoEnchantsCraftEnchantment.kt
+index f5456214..f1357fc3 100644
+--- a/eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/registration/EcoEnchantsCraftEnchantment.kt
++++ b/eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/registration/EcoEnchantsCraftEnchantment.kt
+@@ -1,4 +1,4 @@
+-package com.willfp.ecoenchants.proxy.v1_21_4.registration
++package com.willfp.ecoenchants.proxy.v1_21_8.registration
+ 
+ import com.willfp.eco.util.toComponent
+ import com.willfp.ecoenchants.display.getFormattedName
+@@ -7,7 +7,6 @@ import com.willfp.ecoenchants.enchant.impl.EcoEnchantBase
+ import net.kyori.adventure.text.Component
+ import net.minecraft.core.Holder
+ import net.minecraft.world.item.enchantment.Enchantment
+-import org.bukkit.NamespacedKey
+ import org.bukkit.craftbukkit.enchantments.CraftEnchantment
+ import org.bukkit.enchantments.EnchantmentTarget
+ import org.bukkit.inventory.ItemStack
+diff --git a/eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/registration/ModifiedVanillaCraftEnchantment.kt b/eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/registration/ModifiedVanillaCraftEnchantment.kt
+similarity index 94%
+rename from eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/registration/ModifiedVanillaCraftEnchantment.kt
+rename to eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/registration/ModifiedVanillaCraftEnchantment.kt
+index 27df1e45..ea885d10 100644
+--- a/eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/registration/ModifiedVanillaCraftEnchantment.kt
++++ b/eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/registration/ModifiedVanillaCraftEnchantment.kt
+@@ -1,4 +1,4 @@
+-package com.willfp.ecoenchants.proxy.v1_21_4.registration
++package com.willfp.ecoenchants.proxy.v1_21_8.registration
+ 
+ import com.willfp.ecoenchants.enchant.vanillaEnchantmentData
+ import net.minecraft.core.Holder
+diff --git a/eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/registration/VanillaEcoEnchantsEnchantment.kt b/eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/registration/VanillaEcoEnchantsEnchantment.kt
+similarity index 91%
+rename from eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/registration/VanillaEcoEnchantsEnchantment.kt
+rename to eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/registration/VanillaEcoEnchantsEnchantment.kt
+index 21452706..7afc8478 100644
+--- a/eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/registration/VanillaEcoEnchantsEnchantment.kt
++++ b/eco-core/core-nms/v1_21_8/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_8/registration/VanillaEcoEnchantsEnchantment.kt
+@@ -1,4 +1,4 @@
+-package com.willfp.ecoenchants.proxy.v1_21_4.registration
++package com.willfp.ecoenchants.proxy.v1_21_8.registration
+ 
+ import com.willfp.ecoenchants.enchant.EcoEnchant
+ import net.minecraft.core.HolderSet
+diff --git a/eco-core/core-nms/v26_1_1/build.gradle.kts b/eco-core/core-nms/v26_1_1/build.gradle.kts
+new file mode 100644
+index 00000000..b25e2fc0
+--- /dev/null
++++ b/eco-core/core-nms/v26_1_1/build.gradle.kts
+@@ -0,0 +1,37 @@
++import org.jetbrains.kotlin.gradle.dsl.JvmTarget
++
++plugins {
++    id("io.papermc.paperweight.userdev")
++}
++
++group = "com.willfp"
++version = rootProject.version
++
++dependencies {
++    implementation(project(":eco-core:core-nms:v1_21_8", configuration = "shadow"))
++    paperweight.paperDevBundle("26.1.1.build.+")
++}
++
++tasks {
++    shadowJar {
++        relocate(
++            "com.willfp.ecoenchants.proxy.v1_21_8",
++            "com.willfp.ecoenchants.proxy.v26_1_1",
++        )
++
++        exclude("com/willfp/ecoenchants/proxy/v1_21_8/ModernEnchantmentRegisterer*.class")
++        exclude("com/willfp/ecoenchants/proxy/v1_21_8/registration/VanillaEcoEnchantsEnchantment*.class")
++
++        duplicatesStrategy = DuplicatesStrategy.FAIL
++    }
++
++    compileJava {
++        options.release.set(25)
++    }
++
++    compileKotlin {
++        compilerOptions {
++            jvmTarget.set(JvmTarget.JVM_25)
++        }
++    }
++}
+\ No newline at end of file
+diff --git a/eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/ModernEnchantmentRegisterer.kt b/eco-core/core-nms/v26_1_1/src/main/kotlin/com/willfp/ecoenchants/proxy/v26_1_1/ModernEnchantmentRegisterer.kt
+similarity index 92%
+rename from eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/ModernEnchantmentRegisterer.kt
+rename to eco-core/core-nms/v26_1_1/src/main/kotlin/com/willfp/ecoenchants/proxy/v26_1_1/ModernEnchantmentRegisterer.kt
+index df08d0ca..234a8912 100644
+--- a/eco-core/core-nms/v1_21_4/src/main/kotlin/com/willfp/ecoenchants/proxy/v1_21_4/ModernEnchantmentRegisterer.kt
++++ b/eco-core/core-nms/v26_1_1/src/main/kotlin/com/willfp/ecoenchants/proxy/v26_1_1/ModernEnchantmentRegisterer.kt
+@@ -1,29 +1,29 @@
+-package com.willfp.ecoenchants.proxy.v1_21_4
++package com.willfp.ecoenchants.proxy.v26_1_1
+ 
+ import com.willfp.ecoenchants.enchant.EcoEnchant
+ import com.willfp.ecoenchants.enchant.EcoEnchants
+ import com.willfp.ecoenchants.enchant.impl.EcoEnchantBase
+ import com.willfp.ecoenchants.enchant.registration.ModernEnchantmentRegistererProxy
+-import com.willfp.ecoenchants.proxy.v1_21_4.registration.EcoEnchantsCraftEnchantment
+-import com.willfp.ecoenchants.proxy.v1_21_4.registration.ModifiedVanillaCraftEnchantment
+-import com.willfp.ecoenchants.proxy.v1_21_4.registration.vanillaEcoEnchantsEnchantment
++import com.willfp.ecoenchants.proxy.v1_21_8.registration.EcoEnchantsCraftEnchantment
++import com.willfp.ecoenchants.proxy.v1_21_8.registration.ModifiedVanillaCraftEnchantment
++import com.willfp.ecoenchants.proxy.v26_1_1.registration.vanillaEcoEnchantsEnchantment
+ import io.papermc.paper.registry.entry.RegistryTypeMapper
+ import io.papermc.paper.registry.legacy.DelayedRegistry
+ import net.minecraft.core.Holder
+ import net.minecraft.core.MappedRegistry
+ import net.minecraft.core.Registry
+ import net.minecraft.core.registries.Registries
+-import net.minecraft.resources.ResourceLocation
++import net.minecraft.resources.Identifier
+ import org.bukkit.Bukkit
+ import org.bukkit.NamespacedKey
+ import org.bukkit.craftbukkit.CraftRegistry
+ import org.bukkit.craftbukkit.CraftServer
+ import org.bukkit.craftbukkit.util.CraftNamespacedKey
+ import org.bukkit.enchantments.Enchantment
++import org.jspecify.annotations.Nullable
+ import java.lang.reflect.Modifier
+ import java.util.IdentityHashMap
+ import java.util.function.BiFunction
+-import javax.annotation.Nullable
+ 
+ private val enchantmentRegistry =
+     (Bukkit.getServer() as CraftServer).server.registryAccess().lookupOrThrow(Registries.ENCHANTMENT)
+@@ -47,7 +47,7 @@ class ModernEnchantmentRegisterer : ModernEnchantmentRegistererProxy {
+     private val unregisteredIntrusiveHoldersField = MappedRegistry::class.java
+         .declaredFields
+         .filter { it.type == Map::class.java }
+-        .filter { it.isAnnotationPresent(Nullable::class.java) }[0]
++        .filter { it.annotatedType.isAnnotationPresent(Nullable::class.java) }[0]
+         .apply { isAccessible = true }
+ 
+     private val minecraftToBukkit = CraftRegistry::class.java
+@@ -135,7 +135,7 @@ class ModernEnchantmentRegisterer : ModernEnchantmentRegistererProxy {
+ 
+         Registry.register(
+             enchantmentRegistry,
+-            ResourceLocation.withDefaultNamespace(enchant.id),
++            Identifier.withDefaultNamespace(enchant.id),
+             vanillaEnchantment
+         )
+ 
+diff --git a/eco-core/core-nms/v26_1_1/src/main/kotlin/com/willfp/ecoenchants/proxy/v26_1_1/registration/VanillaEcoEnchantsEnchantment.kt b/eco-core/core-nms/v26_1_1/src/main/kotlin/com/willfp/ecoenchants/proxy/v26_1_1/registration/VanillaEcoEnchantsEnchantment.kt
+new file mode 100644
+index 00000000..074a1e9a
+--- /dev/null
++++ b/eco-core/core-nms/v26_1_1/src/main/kotlin/com/willfp/ecoenchants/proxy/v26_1_1/registration/VanillaEcoEnchantsEnchantment.kt
+@@ -0,0 +1,21 @@
++package com.willfp.ecoenchants.proxy.v26_1_1.registration
++
++import com.willfp.ecoenchants.enchant.EcoEnchant
++import net.minecraft.core.HolderSet
++import net.minecraft.resources.Identifier
++import net.minecraft.world.item.enchantment.Enchantment
++
++fun vanillaEcoEnchantsEnchantment(enchant: EcoEnchant): Enchantment {
++    val enchantment = Enchantment.enchantment(
++        Enchantment.definition(
++            HolderSet.empty(),
++            1, // 1.21 hardcodes a minimum weight of 1
++            enchant.maximumLevel,
++            Enchantment.constantCost(1),
++            Enchantment.constantCost(1),
++            0
++        )
++    )
++
++    return enchantment.build(Identifier.withDefaultNamespace(enchant.id))
++}
+\ No newline at end of file
+diff --git a/eco-core/core-nms/v26_1_2/build.gradle.kts b/eco-core/core-nms/v26_1_2/build.gradle.kts
+new file mode 100644
+index 00000000..1e919497
+--- /dev/null
++++ b/eco-core/core-nms/v26_1_2/build.gradle.kts
+@@ -0,0 +1,34 @@
++import org.jetbrains.kotlin.gradle.dsl.JvmTarget
++
++plugins {
++    id("io.papermc.paperweight.userdev")
++}
++
++group = "com.willfp"
++version = rootProject.version
++
++dependencies {
++    implementation(project(":eco-core:core-nms:v26_1_1", configuration = "shadow"))
++    paperweight.paperDevBundle("26.1.2.build.+")
++}
++
++tasks {
++    shadowJar {
++        relocate(
++            "com.willfp.ecoenchants.proxy.v26_1_1",
++            "com.willfp.ecoenchants.proxy.v26_1_2",
++        )
++
++        duplicatesStrategy = DuplicatesStrategy.FAIL
++    }
++
++    compileJava {
++        options.release.set(25)
++    }
++
++    compileKotlin {
++        compilerOptions {
++            jvmTarget.set(JvmTarget.JVM_25)
++        }
++    }
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/build.gradle.kts b/eco-core/core-plugin/build.gradle.kts
+index 8f1fd52c..c7a9c23a 100644
+--- a/eco-core/core-plugin/build.gradle.kts
++++ b/eco-core/core-plugin/build.gradle.kts
+@@ -6,38 +6,37 @@ dependencies {
+         include("*.jar")
+     }
+     )
+-    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
++    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+     compileOnly("net.essentialsx:EssentialsX:2.19.7") {
+         exclude("*", "*")
+     }
+-    compileOnly("commons-lang:commons-lang:2.6")
++    // Bedrock support: used only to detect Bedrock players and send native confirmation forms.
++    compileOnly("org.geysermc.floodgate:api:2.2.4-SNAPSHOT")
+ }
+ 
+ tasks {
+     build {
+-        dependsOn("publishToMavenLocal")
++        dependsOn(publishToMavenLocal)
+     }
+ }
+ 
+ publishing {
+     publications {
+-        register<MavenPublication>("maven") {
+-            groupId = project.group.toString()
+-            version = project.version.toString()
+-            artifactId = rootProject.name
+-
+-            artifact(rootProject.tasks.shadowJar.get().archiveFile)
++        create<MavenPublication>("shadow") {
++            from(components["java"])
++            // Lowercase: GitHub Packages Maven rejects uppercase artifact ids with HTTP 422.
++            artifactId = rootProject.name.lowercase()
+         }
+     }
+ 
+     repositories {
+         maven {
+-            name = "auxilor"
+-            url = uri("https://repo.auxilor.io/repository/maven-releases/")
++            name = "GitHubPackages"
++            url = uri("https://maven.pkg.github.com/MrNickax/EcoEnchants-Folia")
+             credentials {
+-                username = System.getenv("MAVEN_USERNAME")
+-                password = System.getenv("MAVEN_PASSWORD")
++                username = System.getenv("GITHUB_ACTOR") ?: (findProperty("gpr.user") as String?)
++                password = System.getenv("GITHUB_TOKEN") ?: (findProperty("gpr.key") as String?)
+             }
+         }
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/EcoEnchantsPlugin.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/EcoEnchantsPlugin.kt
+index e177d8e1..92021717 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/EcoEnchantsPlugin.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/EcoEnchantsPlugin.kt
+@@ -1,6 +1,6 @@
+ package com.willfp.ecoenchants
+ 
+-import com.willfp.eco.core.LifecyclePosition
++import com.willfp.eco.core.bstats.EcoMetricsChart
+ import com.willfp.eco.core.command.impl.PluginCommand
+ import com.willfp.eco.core.display.DisplayModule
+ import com.willfp.eco.core.integrations.IntegrationLoader
+@@ -24,13 +24,17 @@ import com.willfp.ecoenchants.integrations.EnchantRegistrations
+ import com.willfp.ecoenchants.integrations.plugins.CMIIntegration
+ import com.willfp.ecoenchants.integrations.plugins.EssentialsIntegration
+ import com.willfp.ecoenchants.mechanics.AnvilSupport
++import com.willfp.ecoenchants.mechanics.BedrockBookApplySupport
+ import com.willfp.ecoenchants.mechanics.EnchantingTableSupport
+ import com.willfp.ecoenchants.mechanics.ExtraItemSupport
+ import com.willfp.ecoenchants.mechanics.GrindstoneSupport
+ import com.willfp.ecoenchants.mechanics.LootSupport
+ import com.willfp.ecoenchants.mechanics.VillagerSupport
++import com.willfp.ecoenchants.rarity.EnchantmentRarities
+ import com.willfp.ecoenchants.target.EnchantFinder
+ import com.willfp.ecoenchants.target.EnchantFinder.clearEnchantmentCache
++import com.willfp.ecoenchants.target.EnchantmentTargets
++import com.willfp.ecoenchants.type.EnchantmentTypes
+ import com.willfp.libreforge.NamedValue
+ import com.willfp.libreforge.loader.LibreforgePlugin
+ import com.willfp.libreforge.loader.configs.ConfigCategory
+@@ -87,34 +91,35 @@ class EcoEnchantsPlugin : LibreforgePlugin() {
+ 
+     override fun handleReload() {
+         DisplayCache.reload()
+-        EnchantSorter.reload(this)
+-        ExtraItemSupport.reload(this)
+-        EnchantGUI.reload(this)
++        EnchantSorter.reload()
++        ExtraItemSupport.reload()
++        EnchantGUI.reload()
+     }
+ 
+     override fun loadListeners(): List<Listener> {
+         return listOf(
+-            VillagerSupport(this),
+-            EnchantingTableSupport(this),
+-            LootSupport(this),
+-            AnvilSupport(this),
+-            LoreConversion(this),
+-            GrindstoneSupport(this)
++            VillagerSupport,
++            EnchantingTableSupport,
++            LootSupport,
++            AnvilSupport,
++            LoreConversion,
++            GrindstoneSupport,
++            BedrockBookApplySupport
+         )
+     }
+ 
+     override fun loadIntegrationLoaders(): List<IntegrationLoader> {
+         return listOf(
+-            IntegrationLoader("Essentials") { EnchantRegistrations.register(EssentialsIntegration()) },
+-            IntegrationLoader("CMI") { EnchantRegistrations.register(CMIIntegration()) }
++            IntegrationLoader("Essentials") { EnchantRegistrations.register(EssentialsIntegration) },
++            IntegrationLoader("CMI") { EnchantRegistrations.register(CMIIntegration) }
+         )
+     }
+ 
+     override fun loadPluginCommands(): List<PluginCommand> {
+         return listOf(
+-            CommandEcoEnchants(this),
+-            CommandEnchantInfo(this),
+-            CommandEnchant(this)
++            CommandEcoEnchants,
++            CommandEnchantInfo,
++            CommandEnchant
+         )
+     }
+ 
+@@ -124,7 +129,17 @@ class EcoEnchantsPlugin : LibreforgePlugin() {
+         }
+ 
+         return listOf(
+-            EnchantDisplay(this)
++            EnchantDisplay
+         )
+     }
+-}
++
++    override fun getCustomCharts() = listOf(
++        EcoMetricsChart.SingleLine("total_enchants") { EcoEnchants.values().size },
++        EcoMetricsChart.SingleLine("total_rarities") { EnchantmentRarities.values().size },
++        EcoMetricsChart.SingleLine("total_targets") { EnchantmentTargets.values().size },
++        EcoMetricsChart.SingleLine("total_types") { EnchantmentTypes.values().size },
++        EcoMetricsChart.SimplePie("display_enabled") {
++            if (configYml.getBool("display.enabled")) "enabled" else "disabled"
++        }
++    )
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/ReflectionUtil.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/ReflectionUtil.kt
+index b9aeed1d..933f5fb7 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/ReflectionUtil.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/ReflectionUtil.kt
+@@ -12,4 +12,4 @@ private val unsafe = Unsafe::class.java.getDeclaredField("theUnsafe")
+ fun Field.setStaticFinal(value: Any) {
+     val offset = unsafe.staticFieldOffset(this)
+     unsafe.putObject(unsafe.staticFieldBase(this), offset, value)
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandEcoEnchants.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandEcoEnchants.kt
+index d7c49b45..afab95a2 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandEcoEnchants.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandEcoEnchants.kt
+@@ -1,11 +1,15 @@
+ package com.willfp.ecoenchants.commands
+ 
+ import com.willfp.eco.core.command.impl.PluginCommand
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
++import com.willfp.ecoenchants.plugin
+ import org.bukkit.command.CommandSender
+ 
+-class CommandEcoEnchants(plugin: EcoEnchantsPlugin) :
+-    PluginCommand(plugin, "ecoenchants", "ecoenchants.command.ecoenchants", false) {
++object CommandEcoEnchants : PluginCommand(
++    plugin,
++    "ecoenchants",
++    "ecoenchants.command.ecoenchants",
++    false
++) {
+     override fun onExecute(sender: CommandSender, args: List<String>) {
+         sender.sendMessage(
+             plugin.langYml.getMessage("invalid-command")
+@@ -13,9 +17,9 @@ class CommandEcoEnchants(plugin: EcoEnchantsPlugin) :
+     }
+ 
+     init {
+-        addSubcommand(CommandReload(plugin))
+-            .addSubcommand(CommandToggleDescriptions(plugin))
+-            .addSubcommand(CommandGiveRandomBook(plugin))
+-            .addSubcommand(CommandGUI(plugin))
++        addSubcommand(CommandReload)
++            .addSubcommand(CommandToggleDescriptions)
++            .addSubcommand(CommandGiveRandomBook)
++            .addSubcommand(CommandGUI)
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandEnchant.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandEnchant.kt
+index 4f1dee46..187528b5 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandEnchant.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandEnchant.kt
+@@ -1,11 +1,11 @@
+ package com.willfp.ecoenchants.commands
+ 
+-import com.willfp.eco.core.EcoPlugin
+ import com.willfp.eco.core.command.impl.PluginCommand
+ import com.willfp.eco.util.StringUtils
+ import com.willfp.eco.util.savedDisplayName
+ import com.willfp.ecoenchants.display.getFormattedName
+ import com.willfp.ecoenchants.enchant.wrap
++import com.willfp.ecoenchants.plugin
+ import org.bukkit.NamespacedKey
+ import org.bukkit.command.CommandSender
+ import org.bukkit.enchantments.Enchantment
+@@ -13,8 +13,11 @@ import org.bukkit.entity.Player
+ import org.bukkit.inventory.meta.EnchantmentStorageMeta
+ import org.bukkit.util.StringUtil
+ 
+-class CommandEnchant(plugin: EcoPlugin) : PluginCommand(
+-    plugin, "enchant", "ecoenchants.command.enchant", false
++object CommandEnchant : PluginCommand(
++    plugin,
++    "enchant",
++    "ecoenchants.command.enchant",
++    false
+ ) {
+     override fun onExecute(sender: CommandSender, rawArgs: List<String>) {
+         var args = rawArgs
+@@ -37,7 +40,10 @@ class CommandEnchant(plugin: EcoPlugin) : PluginCommand(
+ 
+         val item = player.inventory.itemInMainHand
+ 
+-        val meta = item.itemMeta
++        val meta = notifyNull(
++            item.takeUnless { it.type.isAir }?.itemMeta,
++            "invalid-item"
++        )
+ 
+         if (level > 0) {
+             if (meta is EnchantmentStorageMeta) {
+@@ -104,4 +110,4 @@ class CommandEnchant(plugin: EcoPlugin) : PluginCommand(
+ 
+         return completions
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandEnchantInfo.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandEnchantInfo.kt
+index 3a855793..910d357b 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandEnchantInfo.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandEnchantInfo.kt
+@@ -1,17 +1,19 @@
+ package com.willfp.ecoenchants.commands
+ 
+ import com.willfp.eco.core.command.impl.PluginCommand
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+ import com.willfp.ecoenchants.display.getFormattedName
+ import com.willfp.ecoenchants.enchant.EcoEnchants
+ import com.willfp.ecoenchants.enchant.EnchantGUI
++import com.willfp.ecoenchants.plugin
+ import org.bukkit.command.CommandSender
+ import org.bukkit.entity.Player
+ import org.bukkit.util.StringUtil
+ 
+-
+-class CommandEnchantInfo(plugin: EcoEnchantsPlugin) : PluginCommand(
+-    plugin, "enchantinfo", "ecoenchants.command.enchantinfo", true
++object CommandEnchantInfo : PluginCommand(
++    plugin,
++    "enchantinfo",
++    "ecoenchants.command.enchantinfo",
++    true
+ ) {
+     override fun onExecute(sender: CommandSender, args: List<String>) {
+         sender as Player
+@@ -21,11 +23,9 @@ class CommandEnchantInfo(plugin: EcoEnchantsPlugin) : PluginCommand(
+             return
+         }
+ 
+-        val nameBuilder = StringBuilder()
+-
+-        args.forEach { arg -> nameBuilder.append(arg).append(" ") }
+-        var searchName = nameBuilder.toString()
+-        searchName = searchName.substring(0, searchName.length - 1)
++        val level = if (args.size > 1) args.last().toIntOrNull() else null
++        val nameArgs = if (level != null) args.dropLast(1) else args
++        val searchName = nameArgs.joinToString(" ")
+ 
+         val enchantment = EcoEnchants.getByName(searchName)
+ 
+@@ -35,7 +35,7 @@ class CommandEnchantInfo(plugin: EcoEnchantsPlugin) : PluginCommand(
+             return
+         }
+ 
+-        EnchantGUI.openInfoGUI(sender, enchantment, plugin as EcoEnchantsPlugin)
++        EnchantGUI.openInfoGUI(sender, enchantment, level ?: -1)
+     }
+ 
+     override fun tabComplete(sender: CommandSender, args: List<String>): List<String> {
+@@ -49,17 +49,31 @@ class CommandEnchantInfo(plugin: EcoEnchantsPlugin) : PluginCommand(
+             return names
+         }
+ 
++        // If all args except the last form a complete enchant name, suggest level numbers
++        if (args.size > 1) {
++            val namePrefix = args.dropLast(1).joinToString(" ")
++            val matched = EcoEnchants.getByName(namePrefix)
++            if (matched != null) {
++                val levels = (1..matched.maximumLevel).map { it.toString() }
++                StringUtil.copyPartialMatches(args.last(), levels, completions)
++                return completions
++            }
++        }
++
+         StringUtil.copyPartialMatches(args.joinToString(" "), names, completions)
+ 
+-        if (args.size > 1) { // Remove all previous words from the candidate of completions
+-            val finishedArgs = args.toMutableList()
+-            finishedArgs.drop(args.size - 1)
+-            val prefix = finishedArgs.joinToString(" ")
++        if (args.size > 1) {
++            val prefix = args.dropLast(1).joinToString(" ") + " "
++            val trimmed = completions.mapNotNull { completion ->
++                if (completion.startsWith(prefix, ignoreCase = true)) {
++                    completion.substring(prefix.length)
++                } else null
++            }
+             completions.clear()
+-            completions.stream().map { it.removePrefix(prefix).trim() }
++            completions.addAll(trimmed)
+         }
+ 
+         completions.sort()
+         return completions
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandGUI.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandGUI.kt
+index a5416f95..92e08514 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandGUI.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandGUI.kt
+@@ -1,14 +1,19 @@
+ package com.willfp.ecoenchants.commands
+ 
+-import com.willfp.eco.core.EcoPlugin
+ import com.willfp.eco.core.command.impl.Subcommand
+ import com.willfp.ecoenchants.enchant.EnchantGUI
++import com.willfp.ecoenchants.plugin
+ import org.bukkit.command.CommandSender
+ import org.bukkit.entity.Player
+ 
+-class CommandGUI(plugin: EcoPlugin) : Subcommand(plugin, "gui", "ecoenchants.command.gui", true) {
++object CommandGUI : Subcommand(
++    plugin,
++    "gui",
++    "ecoenchants.command.gui",
++    true
++) {
+     override fun onExecute(player: CommandSender, args: List<String>) {
+         player as Player
+         EnchantGUI.openGUI(player)
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandGiveRandomBook.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandGiveRandomBook.kt
+index 448e4b9f..ed7170fd 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandGiveRandomBook.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandGiveRandomBook.kt
+@@ -1,6 +1,5 @@
+ package com.willfp.ecoenchants.commands
+ 
+-import com.willfp.eco.core.EcoPlugin
+ import com.willfp.eco.core.command.impl.PluginCommand
+ import com.willfp.eco.core.drops.DropQueue
+ import com.willfp.eco.core.items.builder.EnchantedBookBuilder
+@@ -8,6 +7,7 @@ import com.willfp.eco.util.NumberUtils
+ import com.willfp.eco.util.StringUtils
+ import com.willfp.ecoenchants.display.getFormattedName
+ import com.willfp.ecoenchants.enchant.EcoEnchants
++import com.willfp.ecoenchants.plugin
+ import com.willfp.ecoenchants.rarity.EnchantmentRarities
+ import com.willfp.ecoenchants.rarity.EnchantmentRarity
+ import com.willfp.ecoenchants.type.EnchantmentType
+@@ -15,8 +15,11 @@ import com.willfp.ecoenchants.type.EnchantmentTypes
+ import org.bukkit.Bukkit
+ import org.bukkit.command.CommandSender
+ 
+-class CommandGiveRandomBook(plugin: EcoPlugin) : PluginCommand(
+-    plugin, "giverandombook", "ecoenchants.command.giverandombook", false
++object CommandGiveRandomBook : PluginCommand(
++    plugin,
++    "giverandombook",
++    "ecoenchants.command.giverandombook",
++    false
+ ) {
+     override fun onExecute(sender: CommandSender, args: List<String>) {
+         val playerName = args.getOrNull(0)
+@@ -85,11 +88,12 @@ class CommandGiveRandomBook(plugin: EcoPlugin) : PluginCommand(
+             2 -> (EnchantmentRarities.values().map { it.id } + EnchantmentTypes.values().map { it.id })
+             3 -> (1..10).map { it.toString() }
+             4 -> {
+-                val startLevel = args[3].toIntOrNull() ?: 1
++                val startLevel = args[2].toIntOrNull() ?: 1
+                 val endLevel = startLevel + 10
+                 (startLevel..endLevel).map { it.toString() }
+             }
++
+             else -> emptyList()
+         }
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandReload.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandReload.kt
+index db77d6f3..41621304 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandReload.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandReload.kt
+@@ -1,13 +1,23 @@
+ package com.willfp.ecoenchants.commands
+ 
+-import com.willfp.eco.core.EcoPlugin
+-import com.willfp.eco.core.Prerequisite
+ import com.willfp.eco.core.command.impl.Subcommand
++import com.willfp.eco.util.StringUtils
++import com.willfp.eco.util.toNiceString
++import com.willfp.ecoenchants.enchant.EcoEnchants
++import com.willfp.ecoenchants.plugin
+ import org.bukkit.command.CommandSender
+ 
+-class CommandReload(plugin: EcoPlugin) : Subcommand(plugin, "reload", "ecoenchants.command.reload", false) {
++object CommandReload : Subcommand(
++    plugin,
++    "reload",
++    "ecoenchants.command.reload",
++    false
++) {
+     override fun onExecute(sender: CommandSender, args: List<String>) {
+-        plugin.reload()
+-        sender.sendMessage(plugin.langYml.getMessage("reload"))
++        sender.sendMessage(
++            plugin.langYml.getMessage("reloaded", StringUtils.FormatOption.WITHOUT_PLACEHOLDERS)
++                .replace("%time%", plugin.reloadWithTime().toNiceString())
++                .replace("%count%", EcoEnchants.values().size.toString())
++        )
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandToggleDescriptions.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandToggleDescriptions.kt
+index 2e002596..4346c73d 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandToggleDescriptions.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/commands/CommandToggleDescriptions.kt
+@@ -1,15 +1,15 @@
+ package com.willfp.ecoenchants.commands
+ 
+-import com.willfp.eco.core.EcoPlugin
+ import com.willfp.eco.core.command.impl.Subcommand
+ import com.willfp.eco.core.data.keys.PersistentDataKey
+ import com.willfp.eco.core.data.keys.PersistentDataKeyType
+ import com.willfp.eco.core.data.profile
+ import com.willfp.eco.util.NamespacedKeyUtils
++import com.willfp.ecoenchants.plugin
+ import org.bukkit.command.CommandSender
+ import org.bukkit.entity.Player
+ 
+-class CommandToggleDescriptions(plugin: EcoPlugin) : Subcommand(
++object CommandToggleDescriptions : Subcommand(
+     plugin,
+     "toggledescriptions",
+     "ecoenchants.command.toggledescriptions",
+@@ -37,14 +37,12 @@ class CommandToggleDescriptions(plugin: EcoPlugin) : Subcommand(
+         }
+     }
+ 
+-    companion object {
+-        private val descriptionsKey = PersistentDataKey(
+-            NamespacedKeyUtils.create("ecoenchants", "descriptions_enabled"),
+-            PersistentDataKeyType.BOOLEAN,
+-            true
+-        )
++    private val descriptionsKey = PersistentDataKey(
++        NamespacedKeyUtils.create("ecoenchants", "descriptions_enabled"),
++        PersistentDataKeyType.BOOLEAN,
++        true
++    )
+ 
+-        val Player.seesEnchantmentDescriptions: Boolean
+-            get() = this.profile.read(descriptionsKey)
+-    }
+-}
++    val Player.seesEnchantmentDescriptions: Boolean
++        get() = this.profile.read(descriptionsKey)
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/config/Configs.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/config/Configs.kt
+index 90d2fd75..47928dda 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/config/Configs.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/config/Configs.kt
+@@ -1,10 +1,10 @@
+ package com.willfp.ecoenchants.config
+ 
+-import com.willfp.eco.core.EcoPlugin
+ import com.willfp.eco.core.config.BaseConfig
+ import com.willfp.eco.core.config.ConfigType
++import com.willfp.ecoenchants.EcoEnchantsPlugin
+ 
+-class TypesYml(plugin: EcoPlugin) : BaseConfig("types", plugin, true, ConfigType.YAML)
+-class TargetsYml(plugin: EcoPlugin) : BaseConfig("targets", plugin, true, ConfigType.YAML)
+-class RarityYml(plugin: EcoPlugin) : BaseConfig("rarity", plugin, true, ConfigType.YAML)
+-class VanillaEnchantsYml(plugin: EcoPlugin) : BaseConfig("vanillaenchants", plugin, false, ConfigType.YAML)
++class TypesYml(plugin: EcoEnchantsPlugin) : BaseConfig("types", plugin, true, ConfigType.YAML)
++class TargetsYml(plugin: EcoEnchantsPlugin) : BaseConfig("targets", plugin, true, ConfigType.YAML)
++class RarityYml(plugin: EcoEnchantsPlugin) : BaseConfig("rarity", plugin, true, ConfigType.YAML)
++class VanillaEnchantsYml(plugin: EcoEnchantsPlugin) : BaseConfig("vanillaenchants", plugin, false, ConfigType.YAML)
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/display/DescriptionPlaceholder.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/display/DescriptionPlaceholder.kt
+index 27cf4167..0694cd1f 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/display/DescriptionPlaceholder.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/display/DescriptionPlaceholder.kt
+@@ -3,4 +3,4 @@ package com.willfp.ecoenchants.display
+ class DescriptionPlaceholder(
+     val id: String,
+     val value: Double
+-)
++)
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/display/EnchantDisplay.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/display/EnchantDisplay.kt
+index ea4c002c..a7deb53b 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/display/EnchantDisplay.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/display/EnchantDisplay.kt
+@@ -6,13 +6,11 @@ import com.willfp.eco.core.display.DisplayPriority
+ import com.willfp.eco.core.display.DisplayProperties
+ import com.willfp.eco.core.fast.FastItemStack
+ import com.willfp.eco.core.fast.fast
+-import com.willfp.eco.core.items.builder.modify
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+-import com.willfp.ecoenchants.commands.CommandToggleDescriptions.Companion.seesEnchantmentDescriptions
++import com.willfp.ecoenchants.commands.CommandToggleDescriptions.seesEnchantmentDescriptions
+ import com.willfp.ecoenchants.display.EnchantSorter.sortForDisplay
+ import com.willfp.ecoenchants.enchant.EcoEnchant
+-import com.willfp.ecoenchants.enchant.EcoEnchants
+ import com.willfp.ecoenchants.enchant.wrap
++import com.willfp.ecoenchants.plugin
+ import com.willfp.ecoenchants.target.EnchantmentTargets.isEnchantable
+ import com.willfp.libreforge.ItemProvidedHolder
+ import org.bukkit.Material
+@@ -21,9 +19,6 @@ import org.bukkit.inventory.ItemFlag
+ import org.bukkit.inventory.ItemStack
+ import org.bukkit.persistence.PersistentDataContainer
+ import org.bukkit.persistence.PersistentDataType
+-import kotlin.collections.component1
+-import kotlin.collections.component2
+-import kotlin.collections.set
+ 
+ // Works around HIDE_POTION_EFFECTS not existing in 1.20.5+
+ interface HideStoredEnchantsProxy {
+@@ -33,7 +28,7 @@ interface HideStoredEnchantsProxy {
+ }
+ 
+ @Suppress("DEPRECATION")
+-class EnchantDisplay(private val plugin: EcoEnchantsPlugin) : DisplayModule(plugin, DisplayPriority.HIGH) {
++object EnchantDisplay : DisplayModule(plugin, DisplayPriority.HIGH) {
+     private val hideStateKey =
+         plugin.namespacedKeyFactory.create("ecoenchantlore-skip") // Same for backwards compatibility
+ 
+@@ -117,8 +112,9 @@ class EnchantDisplay(private val plugin: EcoEnchantsPlugin) : DisplayModule(plug
+                 enchantLore.add(Display.PREFIX + formattedName)
+ 
+                 if (shouldDescribe) {
+-                    enchantLore.addAll(enchant.getFormattedDescription(level, player)
+-                        .filter { it.isNotEmpty() }.map { Display.PREFIX + it })
++                    enchantLore.addAll(
++                        enchant.getFormattedDescription(level, player)
++                            .filter { it.isNotEmpty() }.map { Display.PREFIX + it })
+                 }
+             }
+         }
+@@ -128,7 +124,7 @@ class EnchantDisplay(private val plugin: EcoEnchantsPlugin) : DisplayModule(plug
+             hse.hideStoredEnchants(fast)
+         }
+ 
+-        if(plugin.configYml.getBool("display.enchantments-below-lore")) {
++        if (plugin.configYml.getBool("display.enchantments-below-lore")) {
+             fast.lore = lore + enchantLore + notMetLines
+         } else {
+             fast.lore = enchantLore + lore + notMetLines
+@@ -172,4 +168,4 @@ class EnchantDisplay(private val plugin: EcoEnchantsPlugin) : DisplayModule(plug
+ 
+     private val PersistentDataContainer.hideState: Int
+         get() = this.get(hideStateKey, PersistentDataType.INTEGER) ?: -1
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/display/EnchantmentFormatting.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/display/EnchantmentFormatting.kt
+index 849ee056..1f8c5e37 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/display/EnchantmentFormatting.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/display/EnchantmentFormatting.kt
+@@ -92,4 +92,4 @@ fun EcoEnchantLike.getFormattedDescription(level: Int, player: Player? = null):
+ }
+ 
+ // Java backwards compatibility
+-fun EcoEnchantLike.getFormattedDescription(level: Int): List<String> = getFormattedDescription(level, null)
++fun EcoEnchantLike.getFormattedDescription(level: Int): List<String> = getFormattedDescription(level, null)
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/display/Sorters.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/display/Sorters.kt
+index 5b89a9e6..711c6841 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/display/Sorters.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/display/Sorters.kt
+@@ -1,7 +1,7 @@
+ package com.willfp.ecoenchants.display
+ 
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+ import com.willfp.ecoenchants.enchant.wrap
++import com.willfp.ecoenchants.plugin
+ import com.willfp.ecoenchants.rarity.EnchantmentRarities
+ import com.willfp.ecoenchants.rarity.EnchantmentRarity
+ import com.willfp.ecoenchants.type.EnchantmentType
+@@ -15,7 +15,7 @@ interface EnchantmentSorter {
+ object EnchantSorter {
+     private val sorters = mutableListOf<EnchantmentSorter>()
+ 
+-    internal fun reload(plugin: EcoEnchantsPlugin) {
++    internal fun reload() {
+         sorters.clear()
+ 
+         if (plugin.configYml.getBool("display.sort.rarity")) {
+@@ -48,14 +48,14 @@ object AlphabeticSorter : EnchantmentSorter {
+ object LengthSorter : EnchantmentSorter {
+     override fun sort(enchantments: Collection<Enchantment>, children: List<EnchantmentSorter>): List<Enchantment> {
+         @Suppress("DEPRECATION")
+-        return enchantments.sortedBy { org.bukkit.ChatColor.stripColor(it.wrap().getFormattedName(0))!!.length }
++        return enchantments.sortedBy { org.bukkit.ChatColor.stripColor(it.wrap().getFormattedName(0))?.length ?: 0 }
+     }
+ }
+ 
+ object TypeSorter : EnchantmentSorter {
+     private val types = mutableListOf<EnchantmentType>()
+ 
+-    fun update(plugin: EcoEnchantsPlugin) {
++    fun update() {
+         types.clear()
+         types.addAll(plugin.configYml.getStrings("display.sort.type-order").mapNotNull {
+             EnchantmentTypes[it]
+@@ -63,18 +63,11 @@ object TypeSorter : EnchantmentSorter {
+     }
+ 
+     override fun sort(enchantments: Collection<Enchantment>, children: List<EnchantmentSorter>): List<Enchantment> {
++        val sorted = children.getSafely(0).sort(enchantments, children.drop(1))
+         val enchants = mutableListOf<Enchantment>()
+-
+         for (type in types) {
+-            for (enchantment in children.getSafely(0).sort(enchantments, children.drop(1))) {
+-                if (type != enchantment.wrap().type) {
+-                    continue
+-                }
+-
+-                enchants.add(enchantment)
+-            }
++            enchants.addAll(sorted.filter { it.wrap().type == type })
+         }
+-
+         return enchants
+     }
+ }
+@@ -82,7 +75,7 @@ object TypeSorter : EnchantmentSorter {
+ object RaritySorter : EnchantmentSorter {
+     private val rarities = mutableListOf<EnchantmentRarity>()
+ 
+-    fun update(plugin: EcoEnchantsPlugin) {
++    fun update() {
+         rarities.clear()
+         rarities.addAll(plugin.configYml.getStrings("display.sort.rarity-order").mapNotNull {
+             EnchantmentRarities[it]
+@@ -90,18 +83,11 @@ object RaritySorter : EnchantmentSorter {
+     }
+ 
+     override fun sort(enchantments: Collection<Enchantment>, children: List<EnchantmentSorter>): List<Enchantment> {
++        val sorted = children.getSafely(0).sort(enchantments, children.drop(1))
+         val enchants = mutableListOf<Enchantment>()
+-
+         for (rarity in rarities) {
+-            for (enchantment in children.getSafely(0).sort(enchantments, children.drop(1))) {
+-                if (rarity != enchantment.wrap().enchantmentRarity) {
+-                    continue
+-                }
+-
+-                enchants.add(enchantment)
+-            }
++            enchants.addAll(sorted.filter { it.wrap().enchantmentRarity == rarity })
+         }
+-
+         return enchants
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EcoEnchant.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EcoEnchant.kt
+index 5533748b..44fee6e3 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EcoEnchant.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EcoEnchant.kt
+@@ -23,6 +23,11 @@ interface EcoEnchant : KRegistrable, EcoEnchantLike {
+      */
+     val conflicts: Set<Enchantment>
+ 
++    /**
++     * The required enchantments.
++     */
++    val required: Set<Enchantment>
++
+     /**
+      * The enchantment targets.
+      */
+@@ -78,4 +83,13 @@ interface EcoEnchant : KRegistrable, EcoEnchantLike {
+ 
+         return false
+     }
+-}
++
++    /**
++     * Get if all required enchantments are in [other].
++     */
++    fun hasRequiredEnchantments(other: Collection<Enchantment>): Boolean {
++        return required.all { requiredEnchant ->
++            other.any { otherEnchant -> otherEnchant.key == requiredEnchant.key }
++        }
++    }
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EcoEnchantLevel.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EcoEnchantLevel.kt
+index 5b6051a1..53e13e7a 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EcoEnchantLevel.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EcoEnchantLevel.kt
+@@ -1,6 +1,6 @@
+ package com.willfp.ecoenchants.enchant
+ 
+-import com.willfp.eco.core.EcoPlugin
++import com.willfp.ecoenchants.plugin
+ import com.willfp.libreforge.Holder
+ import com.willfp.libreforge.conditions.ConditionList
+ import com.willfp.libreforge.effects.EffectList
+@@ -10,8 +10,7 @@ class EcoEnchantLevel(
+     val enchant: EcoEnchant,
+     val level: Int,
+     override val effects: EffectList,
+-    override val conditions: ConditionList,
+-    plugin: EcoPlugin
++    override val conditions: ConditionList
+ ) : Holder {
+     override val id = plugin.createNamespacedKey("${enchant.id}_$level")
+ 
+@@ -30,4 +29,4 @@ class EcoEnchantLevel(
+     override fun hashCode(): Int {
+         return Objects.hash(this.id)
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EcoEnchantLike.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EcoEnchantLike.kt
+index aff6ad8c..e41b65e1 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EcoEnchantLike.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EcoEnchantLike.kt
+@@ -56,20 +56,25 @@ interface EcoEnchantLike {
+     /**
+      * Get if this enchantment can be applied to [item].
+      */
+-    fun canEnchantItem(item: ItemStack): Boolean {
+-        if (
+-            item.fast().getEnchants(true).keys
+-                .map { it.wrap() }
+-                .count { it.type == this.type } >= this.type.limit
+-        ) {
++    fun canEnchantItem(
++        item: ItemStack,
++        additionalEnchantments: Collection<Enchantment> = emptyList()
++    ): Boolean {
++        val enchants = item.fast().getEnchants(true).keys + additionalEnchantments
++
++        if (enchants.count { it.wrap().type == this.type } >= this.type.limit) {
+             return false
+         }
+ 
+-        if (item.fast().getEnchants(true).any { (enchant, _) -> enchant.conflictsWithDeep(this.enchantment) }) {
++        if (enchants.any { enchant -> enchant.conflictsWithDeep(this.enchantment) }) {
+             return false
+         }
+ 
+-        if (item.fast().getEnchants(true).size >= plugin.configYml.getInt("anvil.enchant-limit").infiniteIfNegative()) {
++        if (this is EcoEnchant && !this.hasRequiredEnchantments(enchants)) {
++            return false
++        }
++
++        if (enchants.size >= plugin.configYml.getInt("anvil.enchant-limit").infiniteIfNegative()) {
+             return false
+         }
+ 
+@@ -143,4 +148,3 @@ interface EcoEnchantLike {
+         }
+     }
+ }
+-
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EcoEnchants.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EcoEnchants.kt
+index fc219cee..a424ba3e 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EcoEnchants.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EcoEnchants.kt
+@@ -6,17 +6,16 @@ import com.willfp.ecoenchants.EcoEnchantsPlugin
+ import com.willfp.ecoenchants.display.getFormattedName
+ import com.willfp.ecoenchants.enchant.impl.EcoEnchantBase
+ import com.willfp.ecoenchants.enchant.impl.LibreforgeEcoEnchant
+-import com.willfp.ecoenchants.enchant.impl.hardcoded.EnchantmentPermanenceCurse
+-import com.willfp.ecoenchants.enchant.impl.hardcoded.EnchantmentRepairing
+ import com.willfp.ecoenchants.enchant.impl.hardcoded.EnchantmentReplenish
+-import com.willfp.ecoenchants.enchant.impl.hardcoded.EnchantmentSoulbound
+ import com.willfp.ecoenchants.enchant.registration.ModernEnchantmentRegistererProxy
+ import com.willfp.ecoenchants.integrations.EnchantRegistrations
++import com.willfp.ecoenchants.plugin
+ import com.willfp.ecoenchants.rarity.EnchantmentRarities
+ import com.willfp.ecoenchants.target.EnchantmentTargets
+ import com.willfp.ecoenchants.type.EnchantmentTypes
+ import com.willfp.libreforge.loader.LibreforgePlugin
+ import com.willfp.libreforge.loader.configs.RegistrableCategory
++import org.bukkit.ChatColor
+ 
+ @Suppress("UNUSED")
+ object EcoEnchants : RegistrableCategory<EcoEnchant>("enchant", "enchants") {
+@@ -30,7 +29,7 @@ object EcoEnchants : RegistrableCategory<EcoEnchant>("enchant", "enchants") {
+         for (enchant in registry.values()) {
+             plugin.enchantmentRegisterer.unregister(enchant)
+             EnchantRegistrations.removeEnchant(enchant)
+-            BY_NAME.remove(enchant.getFormattedName(0))
++            BY_NAME.remove(ChatColor.stripColor(enchant.getFormattedName(0))?.lowercase())
+         }
+ 
+         registry.clear()
+@@ -39,18 +38,14 @@ object EcoEnchants : RegistrableCategory<EcoEnchant>("enchant", "enchants") {
+     override fun beforeReload(plugin: LibreforgePlugin) {
+         plugin.getProxy(ModernEnchantmentRegistererProxy::class.java).replaceRegistry()
+ 
+-        plugin as EcoEnchantsPlugin
+-
+-        EnchantmentRarities.update(plugin)
+-        EnchantmentTargets.update(plugin)
+-        EnchantmentTypes.update(plugin)
++        EnchantmentRarities.update()
++        EnchantmentTargets.update()
++        EnchantmentTypes.update()
+     }
+ 
+     override fun afterReload(plugin: LibreforgePlugin) {
+-        plugin as EcoEnchantsPlugin
+-
+-        sendPrompts(plugin)
+-        registerHardcodedEnchantments(plugin)
++        sendPrompts()
++        registerHardcodedEnchantments()
+ 
+         plugin.getProxy(ModernEnchantmentRegistererProxy::class.java).freezeRegistry()
+     }
+@@ -65,13 +60,12 @@ object EcoEnchants : RegistrableCategory<EcoEnchant>("enchant", "enchants") {
+         try {
+             val enchant = LibreforgeEcoEnchant(
+                 id,
+-                config,
+-                plugin
++                config
+             )
+ 
+-            doRegister(plugin, enchant)
++            doRegister(enchant)
+         } catch (e: MissingDependencyException) {
+-            // Ignore missing dependencies for preloaded enchants
++            // Ignore missing dependencies for preloaded enchanting
+         }
+     }
+ 
+@@ -86,38 +80,32 @@ object EcoEnchants : RegistrableCategory<EcoEnchant>("enchant", "enchants") {
+             val enchant = LibreforgeEcoEnchant(
+                 id,
+                 config,
+-                plugin
+             )
+ 
+-            doRegister(plugin, enchant)
++            doRegister(enchant)
+         } catch (e: MissingDependencyException) {
+             addPluginPrompt(plugin, e.plugins)
+         }
+     }
+ 
+-    private fun doRegister(plugin: EcoEnchantsPlugin, enchant: EcoEnchantBase) {
++    private fun doRegister(enchant: EcoEnchantBase) {
+         val enchantment = plugin.enchantmentRegisterer.register(enchant)
+         // Register delegated versions
+         registry.register(enchantment as EcoEnchant)
+         @Suppress("DEPRECATION")
+-        BY_NAME[org.bukkit.ChatColor.stripColor(enchant.getFormattedName(0))] = enchantment as EcoEnchant
++        BY_NAME[ChatColor.stripColor(enchant.getFormattedName(0))?.lowercase()] = enchantment as EcoEnchant
+         EnchantRegistrations.registerEnchantments()
+     }
+ 
+-    private fun registerHardcodedEnchantments(
+-        plugin: EcoEnchantsPlugin
+-    ) {
++    private fun registerHardcodedEnchantments() {
+         val hardcodedEnchantments = listOf(
+-            EnchantmentPermanenceCurse(plugin),
+-            EnchantmentRepairing(plugin),
+-            EnchantmentReplenish(plugin),
+-            EnchantmentSoulbound(plugin)
++            EnchantmentReplenish,
+         )
+ 
+         for (enchantment in hardcodedEnchantments) {
+             // Only register if not already registered (so hardcode can be overridden)
+             if (enchantment.isPresent && registry[enchantment.id] == null) {
+-                doRegister(plugin, enchantment)
++                doRegister(enchantment)
+             }
+         }
+     }
+@@ -125,6 +113,6 @@ object EcoEnchants : RegistrableCategory<EcoEnchant>("enchant", "enchants") {
+     fun getByName(name: String?): EcoEnchant? {
+         return if (name == null) {
+             null
+-        } else BY_NAME[name]
++        } else BY_NAME[name.lowercase()]
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EnchantGUI.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EnchantGUI.kt
+index 4f543a35..f0568d7e 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EnchantGUI.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/EnchantGUI.kt
+@@ -1,7 +1,6 @@
+ package com.willfp.ecoenchants.enchant
+ 
+ import com.github.benmanes.caffeine.cache.Caffeine
+-import com.willfp.eco.core.Prerequisite
+ import com.willfp.eco.core.config.base.LangYml
+ import com.willfp.eco.core.drops.DropQueue
+ import com.willfp.eco.core.fast.fast
+@@ -20,28 +19,34 @@ import com.willfp.eco.core.items.Items
+ import com.willfp.eco.core.items.builder.EnchantedBookBuilder
+ import com.willfp.eco.core.items.builder.ItemStackBuilder
+ import com.willfp.eco.core.items.isEcoEmpty
+-import com.willfp.eco.core.items.isEmpty
+ import com.willfp.eco.util.formatEco
+ import com.willfp.eco.util.lineWrap
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+ import com.willfp.ecoenchants.display.EnchantSorter.sortForDisplay
+ import com.willfp.ecoenchants.display.HideStoredEnchantsProxy
+ import com.willfp.ecoenchants.display.getFormattedDescription
+ import com.willfp.ecoenchants.display.getFormattedName
++import com.willfp.ecoenchants.plugin
+ import com.willfp.ecoenchants.target.EnchantmentTargets.applicableEnchantments
+ import org.bukkit.Material
++import org.bukkit.enchantments.Enchantment
+ import org.bukkit.entity.Player
+ import org.bukkit.inventory.ItemFlag
+ import org.bukkit.inventory.ItemStack
++import com.willfp.ecoenchants.rarity.EnchantmentRarities
++import com.willfp.ecoenchants.type.EnchantmentTypes
++import com.willfp.ecoenchants.target.EnchantmentTargets
+ import kotlin.math.ceil
+ 
+ object EnchantGUI {
+     private lateinit var menu: Menu
+-    private val enchantInfoMenus = Caffeine.newBuilder().build<EcoEnchant, Menu>()
++    private var groupMenu: Menu? = null
++    private val enchantInfoMenus = Caffeine.newBuilder().build<Pair<EcoEnchant, Int>, Menu>()
++    private var allEnchantsSorted: List<Enchantment> = emptyList()
+ 
+-    internal fun reload(plugin: EcoEnchantsPlugin) {
++    internal fun reload() {
+         cachedEnchantmentSlots.invalidateAll()
+         enchantInfoMenus.invalidateAll()
++        allEnchantsSorted = EcoEnchants.values().map { it.enchantment }.sortForDisplay()
+ 
+         menu = menu(plugin.configYml.getInt("enchant-gui.rows")) {
+             title = plugin.configYml.getFormattedString("enchant-gui.title")
+@@ -78,24 +83,57 @@ object EnchantGUI {
+ 
+             onRender { player, menu ->
+                 val atCaptive = menu.getCaptiveItem(player, captiveRow, captiveColumn)
+-                if (atCaptive.isEcoEmpty || atCaptive == null || atCaptive.type == Material.BOOK) {
+-                    menu.setState(player, "enchants", EcoEnchants.values().map { it.enchantment }.sortForDisplay())
++                val hasItem = !atCaptive.isEcoEmpty && atCaptive != null && atCaptive.type != Material.BOOK
++
++                val baseEnchants = if (!hasItem) {
++                    EcoEnchants.values().map { it.enchantment }.sortForDisplay()
+                 } else {
+-                    menu.setState(
+-                        player,
+-                        "enchants",
+-                        atCaptive.applicableEnchantments.map { it.enchantment }.sortForDisplay()
+-                            .subtract(atCaptive.fast().enchants.keys)
+-                            .toList()
+-                    )
++                    atCaptive.applicableEnchantments.map { it.enchantment }.sortForDisplay()
++                        .subtract(atCaptive.fast().enchants.keys)
++                        .toList()
+                 }
+ 
+-                if (menu.getPage(player) > menu.getMaxPage(player)) {
++                // Apply group filter if a groupId is set in menu state
++                val groupId = menu.getState<String>(player, "groupId")
++                val filteredEnchants = if (groupId != null) {
++                    val groupBy = plugin.configYml.getString("enchant-gui.group-by")
++                    baseEnchants.filter { enchantment ->
++                        val wrapped = enchantment.wrap()
++                        when (groupBy) {
++                            "type" -> wrapped.type.id == groupId
++                            "rarity" -> wrapped.enchantmentRarity.id == groupId
++                            "target" -> wrapped is EcoEnchant && wrapped.targets.any { it.id == groupId }
++                            else -> true
++                        }
++                    }
++                } else {
++                    baseEnchants
++                }
++
++                menu.setState(player, "enchants", filteredEnchants)
++
++                // Reset to page 1 when an item is placed or removed from the captive slot
++                val previousHasItem = menu.getState<Boolean>(player, "hasItem") ?: false
++                if (hasItem != previousHasItem) {
++                    menu.setState(player, Page.PAGE_KEY, 1)
++                }
++                menu.setState(player, "hasItem", hasItem)
++
++                // Safety net: also reset if the current page now exceeds the new max.
++                // Compute directly from filteredEnchants to avoid a stale getMaxPage() value
++                // (maxPages may be evaluated before onRender fires).
++                val perPage = plugin.configYml.getInt("enchant-gui.enchant-area.width") * plugin.configYml.getInt("enchant-gui.enchant-area.height")
++                val maxPage = if (filteredEnchants.isEmpty()) {
++                    0
++                } else {
++                    ceil(filteredEnchants.size.toDouble() / perPage).toInt()
++                }
++                if (menu.getPage(player) > maxPage) {
+                     menu.setState(player, Page.PAGE_KEY, 1)
+                 }
+             }
+ 
+-            val pane = EnchantmentScrollPane(plugin)
++            val pane = EnchantmentScrollPane()
+ 
+             addComponent(
+                 plugin.configYml.getInt("enchant-gui.enchant-area.row"),
+@@ -103,7 +141,7 @@ object EnchantGUI {
+                 pane
+             )
+ 
+-            for (direction in PageChanger.Direction.values()) {
++            for (direction in PageChanger.Direction.entries) {
+                 val directionName = direction.name.lowercase()
+ 
+                 addComponent(
+@@ -117,6 +155,49 @@ object EnchantGUI {
+                 )
+             }
+ 
++            if (plugin.configYml.getBool("enchant-gui.close-button.enabled")) {
++                setSlot(
++                    plugin.configYml.getInt("enchant-gui.close-button.row"),
++                    plugin.configYml.getInt("enchant-gui.close-button.column"),
++                    slot(
++                        ItemStackBuilder(Items.lookup(plugin.configYml.getString("enchant-gui.close-button.item")))
++                            .setDisplayName(plugin.configYml.getFormattedString("enchant-gui.close-button.name"))
++                            .addLoreLines(plugin.configYml.getStrings("enchant-gui.close-button.lore"))
++                            .build()
++                    ) {
++                        onLeftClick { event, _ -> event.whoClicked.closeInventory() }
++                    }
++                )
++            }
++
++            // Back button to return to the group selection menu
++            if (plugin.configYml.getBool("enchant-gui.grouped")
++                && plugin.configYml.getBool("enchant-gui.back-button.enabled")) {
++                setSlot(
++                    plugin.configYml.getInt("enchant-gui.back-button.row"),
++                    plugin.configYml.getInt("enchant-gui.back-button.column"),
++                    slot(
++                        ItemStackBuilder(Items.lookup(plugin.configYml.getString("enchant-gui.back-button.item")))
++                            .addLoreLines(plugin.configYml.getStrings("enchant-gui.back-button.lore"))
++                            .build()
++                    ) {
++                        onLeftClick { event, _ ->
++                            val groupGui = groupMenu ?: return@onLeftClick
++                            val player = event.whoClicked as Player
++                            // Return captive items to the player before navigating back
++                            val captiveItems = menu.getCaptiveItems(player)
++                            if (captiveItems.isNotEmpty()) {
++                                DropQueue(player)
++                                    .addItems(captiveItems)
++                                    .forceTelekinesis()
++                                    .push()
++                            }
++                            groupGui.open(player)
++                        }
++                    }
++                )
++            }
++
+             maxPages { player ->
+                 val enchants = menu.getState<List<EcoEnchant>>(player, "enchants") ?: emptyList()
+                 val total = enchants.size
+@@ -146,21 +227,90 @@ object EnchantGUI {
+                 )
+             }
+         }
++
++        // Build the group selection menu (only when grouped mode is enabled)
++        if (plugin.configYml.getBool("enchant-gui.grouped")) {
++            groupMenu = menu(plugin.configYml.getInt("group-gui.rows")) {
++                title = plugin.configYml.getFormattedString("group-gui.title")
++
++                setMask(
++                    FillerMask(
++                        MaskItems.fromItemNames(
++                            plugin.configYml.getStrings("group-gui.mask.items")
++                        ),
++                        *plugin.configYml.getStrings("group-gui.mask.pattern").toTypedArray()
++                    )
++                )
++
++                // Add a clickable slot for each configured group
++                for (config in plugin.configYml.getSubsections("group-gui.groups")) {
++                    val groupId = config.getString("id")
++
++                    // Validate the group ID exists in the registry matching the group-by axis
++                    val groupBy = plugin.configYml.getString("enchant-gui.group-by")
++                    val valid = when (groupBy) {
++                        "type" -> EnchantmentTypes[groupId] != null
++                        "rarity" -> EnchantmentRarities[groupId] != null
++                        "target" -> EnchantmentTargets[groupId] != null
++                        else -> false
++                    }
++
++                    if (!valid) {
++                        continue
++                    }
++
++                    setSlot(
++                        config.getInt("row"),
++                        config.getInt("column"),
++                        slot(
++                            ItemStackBuilder(Items.lookup(config.getString("item")))
++                                .addLoreLines(config.getStrings("lore"))
++                                .build()
++                        ) {
++                            onLeftClick { event, _ ->
++                                openGroupGUI(event.whoClicked as Player, groupId)
++                            }
++                        }
++                    )
++                }
++
++                // Custom decorator slots for the group menu
++                for (config in plugin.configYml.getSubsections("group-gui.custom-slots")) {
++                    setSlot(
++                        config.getInt("row"),
++                        config.getInt("column"),
++                        ConfigSlot(config)
++                    )
++                }
++            }
++        } else {
++            groupMenu = null
++        }
+     }
+ 
+     fun openGUI(player: Player) {
+-        menu.open(player)
++        if (plugin.configYml.getBool("enchant-gui.grouped") && groupMenu != null) {
++            groupMenu!!.open(player)
++        } else {
++            menu.open(player)
++        }
+     }
+ 
+-    fun openInfoGUI(player: Player, enchant: EcoEnchant, plugin: EcoEnchantsPlugin) {
+-        enchantInfoMenus.get(enchant) {
++    fun openInfoGUI(player: Player, enchant: EcoEnchant, level: Int = -1) {
++        val effectiveLevel = if (level == -1) {
++            if (plugin.configYml.getBool("enchantinfo.item.show-max-level")) enchant.maximumLevel else 1
++        } else {
++            level.coerceIn(1, enchant.maximumLevel)
++        }
++
++        enchantInfoMenus.get(enchant to effectiveLevel) {
+             menu(plugin.configYml.getInt("enchantinfo.rows")) {
+-                title = enchant.getFormattedName(0)
++                title = enchant.getFormattedName(effectiveLevel)
+ 
+                 setSlot(
+                     plugin.configYml.getInt("enchantinfo.item.row"),
+                     plugin.configYml.getInt("enchantinfo.item.column"),
+-                    enchant.getInformationSlot(plugin, player)
++                    enchant.getInformationSlot(player, effectiveLevel)
+                 )
+ 
+                 setMask(
+@@ -180,14 +330,18 @@ object EnchantGUI {
+             }
+         }.open(player)
+     }
++
++    private fun openGroupGUI(player: Player, groupId: String) {
++        menu.open(player)
++        menu.setState(player, "groupId", groupId)
++        menu.setState(player, Page.PAGE_KEY, 1)
++    }
+ }
+ 
+-private class EnchantmentScrollPane(
+-    private val plugin: EcoEnchantsPlugin
+-) : GUIComponent {
++private class EnchantmentScrollPane : GUIComponent {
+     private val defaultSlot = slot(Items.lookup(plugin.configYml.getString("enchant-gui.empty-item")))
+ 
+-    override fun getSlotAt(row: Int, column: Int, player: Player, menu: Menu): Slot? {
++    override fun getSlotAt(row: Int, column: Int, player: Player, menu: Menu): Slot {
+         val index = column + ((row - 1) * columns) - 1
+         val page = menu.getPage(player)
+ 
+@@ -198,7 +352,8 @@ private class EnchantmentScrollPane(
+ 
+         val enchant = enchants.getOrNull(index + size * (page - 1)) ?: return defaultSlot
+ 
+-        return enchant.getInformationSlot(plugin, player)
++        val displayLevel = if (plugin.configYml.getBool("enchantinfo.item.show-max-level")) enchant.maximumLevel else 1
++        return enchant.getInformationSlot(player, displayLevel)
+     }
+ 
+     override fun getRows() = plugin.configYml.getInt("enchant-gui.enchant-area.height")
+@@ -208,16 +363,10 @@ private class EnchantmentScrollPane(
+ }
+ 
+ private val cachedEnchantmentSlots = Caffeine.newBuilder()
+-    .build<EcoEnchant, Slot>()
+-
+-private fun EcoEnchant.getInformationSlot(plugin: EcoEnchantsPlugin, player: Player): Slot {
+-    return cachedEnchantmentSlots.get(this) { it ->
+-        val level = if (plugin.configYml.getBool("enchantinfo.item.show-max-level")) {
+-            it.maximumLevel
+-        } else {
+-            1
+-        }
++    .build<Pair<EcoEnchant, Int>, Slot>()
+ 
++private fun EcoEnchant.getInformationSlot(player: Player, level: Int): Slot {
++    return cachedEnchantmentSlots.get(this to level) {
+         slot(
+             EnchantedBookBuilder()
+                 .addStoredEnchantment(enchantment, level)
+@@ -243,9 +392,21 @@ private fun EcoEnchant.getInformationSlot(plugin: EcoEnchantsPlugin, player: Pla
+                                         }.ifEmpty { plugin.langYml.getFormattedString("no-conflicts") }
+                                     }
+                                 )
++                                .replace(
++                                    "%required%",
++                                    this.required.joinToString(", ") { required ->
++                                        required.wrap().getFormattedName(0)
++                                    }.ifEmpty { plugin.langYml.getFormattedString("no-required") }
++                                )
+                                 .replace("%tradeable%", this.isObtainableThroughTrading.parseYesOrNo(plugin.langYml))
+-                                .replace("%discoverable%", this.isObtainableThroughDiscovery.parseYesOrNo(plugin.langYml))
+-                                .replace("%enchantable%", this.isObtainableThroughEnchanting.parseYesOrNo(plugin.langYml))
++                                .replace(
++                                    "%discoverable%",
++                                    this.isObtainableThroughDiscovery.parseYesOrNo(plugin.langYml)
++                                )
++                                .replace(
++                                    "%enchantable%",
++                                    this.isObtainableThroughEnchanting.parseYesOrNo(plugin.langYml)
++                                )
+                         }
+                         .formatEco()
+                         .flatMap {
+@@ -264,4 +425,4 @@ private fun EcoEnchant.getInformationSlot(plugin: EcoEnchantsPlugin, player: Pla
+ 
+ fun Boolean.parseYesOrNo(langYml: LangYml): String {
+     return if (this) langYml.getFormattedString("yes") else langYml.getFormattedString("no")
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/LoreConversion.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/LoreConversion.kt
+index bd3621fd..bb3d169b 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/LoreConversion.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/LoreConversion.kt
+@@ -1,8 +1,8 @@
+ package com.willfp.ecoenchants.enchant
+ 
+-import com.willfp.eco.core.EcoPlugin
+ import com.willfp.eco.core.fast.fast
+ import com.willfp.eco.util.NumberUtils
++import com.willfp.ecoenchants.plugin
+ import org.bukkit.enchantments.Enchantment
+ import org.bukkit.event.EventHandler
+ import org.bukkit.event.Listener
+@@ -12,9 +12,7 @@ import org.bukkit.inventory.BlockInventoryHolder
+ import org.bukkit.inventory.ItemStack
+ import org.bukkit.inventory.meta.EnchantmentStorageMeta
+ 
+-class LoreConversion(
+-    private val plugin: EcoPlugin
+-) : Listener {
++object LoreConversion : Listener {
+     @EventHandler
+     fun loreConverter(event: PlayerItemHeldEvent) {
+         if (!plugin.configYml.getBool("lore-conversion.enabled")) {
+@@ -52,6 +50,7 @@ class LoreConversion(
+         val meta = itemStack.itemMeta ?: return
+ 
+         val toAdd = mutableMapOf<Enchantment, Int>()
++        val matchedLines = mutableListOf<String>()
+ 
+         val lore = itemStack.fast().lore.toMutableList()
+ 
+@@ -94,16 +93,17 @@ class LoreConversion(
+             }
+ 
+             toAdd[enchant.enchantment] = level
++            matchedLines.add(line)
+         }
+ 
+ 
+         if (meta is EnchantmentStorageMeta) {
+-            lore.clear()
++            lore.removeAll(matchedLines)
+             for ((enchant, level) in toAdd) {
+                 meta.addStoredEnchant(enchant, level, true)
+             }
+         } else {
+-            lore.clear()
++            lore.removeAll(matchedLines)
+             for ((enchant, level) in toAdd) {
+                 meta.addEnchant(enchant, level, true)
+             }
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/MissingDependencyException.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/MissingDependencyException.kt
+index 7df6ac91..8b65f61c 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/MissingDependencyException.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/MissingDependencyException.kt
+@@ -1,7 +1,7 @@
+ package com.willfp.ecoenchants.enchant
+ 
+-import com.willfp.eco.core.EcoPlugin
+ import com.willfp.ecoenchants.EcoEnchantsPlugin
++import com.willfp.ecoenchants.plugin
+ 
+ class MissingDependencyException(
+     val plugins: Set<String>
+@@ -22,7 +22,7 @@ fun addPluginPrompt(plugin: EcoEnchantsPlugin, plugins: Set<String>) {
+     }
+ }
+ 
+-fun sendPrompts(plugin: EcoPlugin) {
++fun sendPrompts() {
+     for ((pl, amount) in prompts) {
+         plugin.logger.apply {
+             warning("$amount enchantments were not loaded because they need $pl to be installed!")
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/Util.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/Util.kt
+index 004cbd11..25b5cc59 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/Util.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/Util.kt
+@@ -5,7 +5,6 @@ import com.willfp.ecoenchants.plugin
+ import org.bukkit.NamespacedKey
+ import org.bukkit.enchantments.Enchantment
+ 
+-
+ private val ecoEnchantLikes = mutableMapOf<NamespacedKey, EcoEnchantLike>()
+ 
+ fun Enchantment.wrap(): EcoEnchantLike {
+@@ -13,6 +12,8 @@ fun Enchantment.wrap(): EcoEnchantLike {
+         return this
+     }
+ 
++    EcoEnchants.getByID(this.key.key)?.let { return it }
++
+     return ecoEnchantLikes.getOrPut(this.key) {
+         VanillaEcoEnchantLike(this, plugin)
+     }
+@@ -20,4 +21,4 @@ fun Enchantment.wrap(): EcoEnchantLike {
+ 
+ fun Enchantment.conflictsWithDeep(other: Enchantment): Boolean {
+     return this.conflictsWith(other) || other.conflictsWith(this)
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/VanillaEnchantments.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/VanillaEnchantments.kt
+index a47b56b1..b625d6cc 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/VanillaEnchantments.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/VanillaEnchantments.kt
+@@ -1,6 +1,5 @@
+ package com.willfp.ecoenchants.enchant
+ 
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+ import com.willfp.ecoenchants.plugin
+ import org.bukkit.NamespacedKey
+ import org.bukkit.enchantments.Enchantment
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/EcoEnchantBase.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/EcoEnchantBase.kt
+index 1f34d12e..f509f807 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/EcoEnchantBase.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/EcoEnchantBase.kt
+@@ -38,6 +38,8 @@ abstract class EcoEnchantBase(
+ 
+     private val conflictIds = config.getStrings("conflicts").toSet()
+ 
++    private val requiredIds = config.getStrings("required").toSet()
++
+     override val enchantmentKey = NamespacedKey.minecraft(id)
+ 
+     override val rawDisplayName = config.getString("display-name")
+@@ -55,6 +57,13 @@ abstract class EcoEnchantBase(
+         }
+         .toSet()
+ 
++    override val required = config.getStrings("required")
++        .mapNotNull {
++            @Suppress("DEPRECATION")
++            Enchantment.getByKey(NamespacedKey.minecraft(it))
++        }
++        .toSet()
++
+     override val targets = config.getStrings("targets")
+         .mapNotNull { EnchantmentTargets[it] }
+         .toSet()
+@@ -128,6 +137,12 @@ abstract class EcoEnchantBase(
+         return other.key.key in conflictIds || this.conflictsWithEverything
+     }
+ 
++    override fun hasRequiredEnchantments(other: Collection<Enchantment>): Boolean {
++        return requiredIds.all { requiredId ->
++            other.any { enchantment -> enchantment.key.key.equals(requiredId, ignoreCase = true) }
++        }
++    }
++
+     final override fun equals(other: Any?): Boolean {
+         return other is EcoEnchant && this.enchantmentKey == other.enchantmentKey
+     }
+@@ -135,4 +150,4 @@ abstract class EcoEnchantBase(
+     final override fun hashCode(): Int {
+         return this.enchantmentKey.hashCode()
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/HardcodedEcoEnchant.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/HardcodedEcoEnchant.kt
+index 7883da90..5b1b97ff 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/HardcodedEcoEnchant.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/HardcodedEcoEnchant.kt
+@@ -3,14 +3,13 @@ package com.willfp.ecoenchants.enchant.impl
+ import com.willfp.eco.core.config.ConfigType
+ import com.willfp.eco.core.config.interfaces.Config
+ import com.willfp.eco.core.config.readConfig
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+ import com.willfp.ecoenchants.enchant.EcoEnchantLevel
++import com.willfp.ecoenchants.plugin
+ import com.willfp.libreforge.effects.emptyEffectList
+ import java.io.File
+ 
+ abstract class HardcodedEcoEnchant(
+     id: String,
+-    plugin: EcoEnchantsPlugin
+ ) : EcoEnchantBase(id, plugin) {
+     private val file: File?
+         get() = File(plugin.dataFolder, "enchants")
+@@ -24,6 +23,6 @@ abstract class HardcodedEcoEnchant(
+     }
+ 
+     override fun createLevel(level: Int): EcoEnchantLevel {
+-        return EcoEnchantLevel(this, level, emptyEffectList(), conditions, plugin)
++        return EcoEnchantLevel(this, level, emptyEffectList(), conditions)
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/LibreforgeEcoEnchant.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/LibreforgeEcoEnchant.kt
+index 86f279d4..8ca59772 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/LibreforgeEcoEnchant.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/LibreforgeEcoEnchant.kt
+@@ -2,9 +2,9 @@ package com.willfp.ecoenchants.enchant.impl
+ 
+ import com.willfp.eco.core.config.interfaces.Config
+ import com.willfp.eco.util.containsIgnoreCase
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+ import com.willfp.ecoenchants.enchant.EcoEnchantLevel
+ import com.willfp.ecoenchants.enchant.MissingDependencyException
++import com.willfp.ecoenchants.plugin
+ import com.willfp.libreforge.SilentViolationContext
+ import com.willfp.libreforge.effects.EffectList
+ import com.willfp.libreforge.effects.Effects
+@@ -12,13 +12,12 @@ import org.bukkit.Bukkit
+ 
+ class LibreforgeEcoEnchant(
+     id: String,
+-    _config: Config,
+-    plugin: EcoEnchantsPlugin
++    _config: Config
+ ) : EcoEnchantBase(id, plugin, _config) {
+     private val effects: EffectList
+ 
+     override fun createLevel(level: Int): EcoEnchantLevel {
+-        return EcoEnchantLevel(this, level, effects, conditions, plugin)
++        return EcoEnchantLevel(this, level, effects, conditions)
+     }
+ 
+     init {
+@@ -40,4 +39,4 @@ class LibreforgeEcoEnchant(
+             if (plugin.isLoaded) context.with("effects") else SilentViolationContext
+         )
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/VanillaEcoEnchantLike.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/VanillaEcoEnchantLike.kt
+index aaa5e34e..ad731e07 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/VanillaEcoEnchantLike.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/VanillaEcoEnchantLike.kt
+@@ -41,4 +41,4 @@ class VanillaEcoEnchantLike(
+     override fun hashCode(): Int {
+         return Objects.hash(this.enchantment)
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/hardcoded/EnchantmentPermanenceCurse.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/hardcoded/EnchantmentPermanenceCurse.kt
+deleted file mode 100644
+index 3886f6b9..00000000
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/hardcoded/EnchantmentPermanenceCurse.kt
++++ /dev/null
+@@ -1,13 +0,0 @@
+-package com.willfp.ecoenchants.enchant.impl.hardcoded
+-
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+-import com.willfp.ecoenchants.enchant.impl.HardcodedEcoEnchant
+-
+-class EnchantmentPermanenceCurse(
+-    plugin: EcoEnchantsPlugin
+-) : HardcodedEcoEnchant(
+-    "permanence_curse",
+-    plugin
+-) {
+-
+-}
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/hardcoded/EnchantmentRepairing.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/hardcoded/EnchantmentRepairing.kt
+deleted file mode 100644
+index f9ab1910..00000000
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/hardcoded/EnchantmentRepairing.kt
++++ /dev/null
+@@ -1,44 +0,0 @@
+-package com.willfp.ecoenchants.enchant.impl.hardcoded
+-
+-import com.willfp.eco.util.DurabilityUtils
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+-import com.willfp.ecoenchants.enchant.impl.HardcodedEcoEnchant
+-import com.willfp.ecoenchants.target.EnchantFinder.getItemsWithEnchantActive
+-import com.willfp.ecoenchants.target.EnchantFinder.hasEnchantActive
+-import com.willfp.libreforge.slot.impl.SlotTypeHands
+-import org.bukkit.Bukkit
+-
+-class EnchantmentRepairing(
+-    plugin: EcoEnchantsPlugin
+-) : HardcodedEcoEnchant(
+-    "repairing",
+-    plugin
+-) {
+-    override fun onRegister() {
+-        val frequency = config.getInt("frequency").toLong()
+-
+-        plugin.scheduler.runTimer(frequency, frequency) {
+-            handleRepairing()
+-        }
+-    }
+-
+-    private fun handleRepairing() {
+-        val notWhileHolding = config.getBool("not-while-holding")
+-
+-        for (player in Bukkit.getOnlinePlayers()) {
+-            if (player.hasEnchantActive(this)) {
+-                val repairPerLevel = config.getIntFromExpression("repair-per-level", player)
+-
+-                for ((item, level) in player.getItemsWithEnchantActive(this)) {
+-                    val isHolding = item in SlotTypeHands.getItems(player)
+-
+-                    if (notWhileHolding && isHolding) {
+-                        continue
+-                    }
+-
+-                    DurabilityUtils.repairItem(item, level * repairPerLevel)
+-                }
+-            }
+-        }
+-    }
+-}
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/hardcoded/EnchantmentReplenish.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/hardcoded/EnchantmentReplenish.kt
+index e82bd523..5b9dd2b2 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/hardcoded/EnchantmentReplenish.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/hardcoded/EnchantmentReplenish.kt
+@@ -1,7 +1,5 @@
+ package com.willfp.ecoenchants.enchant.impl.hardcoded
+ 
+-import com.willfp.eco.core.EcoPlugin
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+ import com.willfp.ecoenchants.enchant.EcoEnchant
+ import com.willfp.ecoenchants.enchant.impl.HardcodedEcoEnchant
+ import com.willfp.ecoenchants.target.EnchantFinder.hasEnchantActive
+@@ -16,13 +14,10 @@ import org.bukkit.event.block.BlockPlaceEvent
+ import org.bukkit.inventory.EquipmentSlot
+ import org.bukkit.inventory.ItemStack
+ 
+-class EnchantmentReplenish(
+-    plugin: EcoEnchantsPlugin
+-) : HardcodedEcoEnchant(
+-    "replenish",
+-    plugin
++object EnchantmentReplenish : HardcodedEcoEnchant(
++    "replenish"
+ ) {
+-    private var handler = ReplenishHandler(this, plugin)
++    private var handler = ReplenishHandler(this)
+ 
+     override fun onRegister() {
+         plugin.eventManager.registerListener(handler)
+@@ -33,8 +28,7 @@ class EnchantmentReplenish(
+     }
+ 
+     private class ReplenishHandler(
+-        private val enchant: EcoEnchant,
+-        private val plugin: EcoPlugin
++        private val enchant: EcoEnchant
+     ) : Listener {
+         @EventHandler(
+             ignoreCancelled = true
+@@ -97,7 +91,7 @@ class EnchantmentReplenish(
+ 
+             data.age = 0
+ 
+-            plugin.scheduler.run {
++            Bukkit.getRegionScheduler().run(plugin, block.location) {
+                 block.type = type
+                 block.blockData = data
+ 
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/hardcoded/EnchantmentSoulbound.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/hardcoded/EnchantmentSoulbound.kt
+deleted file mode 100644
+index d48a04c1..00000000
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/impl/hardcoded/EnchantmentSoulbound.kt
++++ /dev/null
+@@ -1,144 +0,0 @@
+-package com.willfp.ecoenchants.enchant.impl.hardcoded
+-
+-import com.willfp.eco.core.EcoPlugin
+-import com.willfp.eco.core.Prerequisite
+-import com.willfp.eco.core.data.keys.PersistentDataKey
+-import com.willfp.eco.core.data.keys.PersistentDataKeyType
+-import com.willfp.eco.core.data.profile
+-import com.willfp.eco.core.drops.DropQueue
+-import com.willfp.eco.core.fast.fast
+-import com.willfp.eco.core.items.Items
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+-import com.willfp.ecoenchants.enchant.EcoEnchant
+-import com.willfp.ecoenchants.enchant.impl.HardcodedEcoEnchant
+-import com.willfp.ecoenchants.target.EnchantFinder.getItemsWithEnchantActive
+-import org.bukkit.entity.Player
+-import org.bukkit.event.EventHandler
+-import org.bukkit.event.EventPriority
+-import org.bukkit.event.Listener
+-import org.bukkit.event.entity.PlayerDeathEvent
+-import org.bukkit.event.player.PlayerJoinEvent
+-import org.bukkit.event.player.PlayerRespawnEvent
+-import org.bukkit.persistence.PersistentDataType
+-
+-class EnchantmentSoulbound(
+-    plugin: EcoEnchantsPlugin
+-) : HardcodedEcoEnchant(
+-    "soulbound",
+-    plugin
+-) {
+-    private val handler = SoulboundHandler(plugin, this)
+-
+-    override fun onRegister() {
+-        plugin.eventManager.registerListener(handler)
+-    }
+-
+-    override fun onRemove() {
+-        plugin.eventManager.unregisterListener(handler)
+-    }
+-
+-    private class SoulboundHandler(
+-        private val plugin: EcoPlugin,
+-        private val enchant: EcoEnchant
+-    ) : Listener {
+-        private val savedSoulboundItems = PersistentDataKey(
+-            plugin.namespacedKeyFactory.create("soulbound_items"),
+-            PersistentDataKeyType.STRING_LIST,
+-            emptyList()
+-        )
+-
+-        private val soulboundKey = plugin.namespacedKeyFactory.create("soulbound")
+-
+-        @EventHandler(
+-            priority = EventPriority.HIGHEST,
+-            ignoreCancelled = true
+-        )
+-        fun handle(event: PlayerDeathEvent) {
+-            if (event.keepInventory) {
+-                return
+-            }
+-
+-            val player = event.entity
+-            val items = player.getItemsWithEnchantActive(enchant).keys
+-
+-            if (items.isEmpty()) {
+-                return
+-            }
+-
+-            event.drops.removeAll(items)
+-
+-            // Use native paper method
+-            if (Prerequisite.HAS_PAPER.isMet) {
+-                val modifiedItems = if (enchant.config.getBool("single-use")) {
+-                    items.map {
+-                        val meta = it.itemMeta
+-                        meta.removeEnchant(enchant.enchantment)
+-                        it.itemMeta = meta
+-                        it
+-                    }
+-                } else {
+-                    items
+-                }
+-
+-                event.itemsToKeep += modifiedItems
+-                return
+-            }
+-
+-            for (item in items) {
+-                item.fast().persistentDataContainer.set(soulboundKey, PersistentDataType.INTEGER, 1)
+-
+-                if (enchant.config.getBool("single-use")) {
+-                    val meta = item.itemMeta
+-                    meta.removeEnchant(enchant.enchantment)
+-                    item.itemMeta = meta
+-                }
+-            }
+-
+-            player.profile.write(savedSoulboundItems, items.map { Items.toSNBT(it) })
+-        }
+-
+-        @EventHandler(
+-            ignoreCancelled = true
+-        )
+-        fun onJoin(event: PlayerJoinEvent) {
+-            giveItems(event.player)
+-        }
+-
+-        @EventHandler(
+-            ignoreCancelled = true
+-        )
+-        fun onJoin(event: PlayerRespawnEvent) {
+-            giveItems(event.player)
+-        }
+-
+-        private fun giveItems(player: Player) {
+-            val itemStrings = player.profile.read(savedSoulboundItems)
+-
+-            if (itemStrings.isEmpty()) {
+-                return
+-            }
+-
+-            val items = itemStrings.map { Items.fromSNBT(it) }
+-
+-            plugin.scheduler.run {
+-                DropQueue(player)
+-                    .addItems(items)
+-                    .forceTelekinesis()
+-                    .push()
+-            }
+-
+-            player.profile.write(savedSoulboundItems, emptyList())
+-        }
+-
+-        @EventHandler(
+-            priority = EventPriority.HIGHEST,
+-            ignoreCancelled = true
+-        )
+-        fun preventDroppingSoulboundItems(event: PlayerDeathEvent) {
+-            event.drops.removeIf {
+-                it.fast().persistentDataContainer.has(soulboundKey, PersistentDataType.INTEGER)
+-                        && it.itemMeta.hasEnchant(enchant.enchantment)
+-            }
+-        }
+-    }
+-}
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/registration/EnchantmentRegisterer.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/registration/EnchantmentRegisterer.kt
+index df2b1ae4..35683454 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/registration/EnchantmentRegisterer.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/enchant/registration/EnchantmentRegisterer.kt
+@@ -8,4 +8,4 @@ interface EnchantmentRegisterer {
+     fun register(enchant: EcoEnchantBase): Enchantment
+ 
+     fun unregister(enchant: EcoEnchant)
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/integrations/EnchantRegistrationIntegration.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/integrations/EnchantRegistrationIntegration.kt
+index a985c35d..123616c8 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/integrations/EnchantRegistrationIntegration.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/integrations/EnchantRegistrationIntegration.kt
+@@ -3,7 +3,6 @@ package com.willfp.ecoenchants.integrations
+ import com.willfp.eco.core.integrations.Integration
+ import com.willfp.ecoenchants.enchant.EcoEnchant
+ 
+-
+ interface EnchantRegistrationIntegration : Integration {
+     fun registerEnchants()
+ 
+@@ -30,4 +29,4 @@ object EnchantRegistrations {
+             runCatching { integration.removeEnchant(enchantment) }
+         }
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/integrations/plugins/CMIIntegration.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/integrations/plugins/CMIIntegration.kt
+index 4198e35a..ed500d4c 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/integrations/plugins/CMIIntegration.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/integrations/plugins/CMIIntegration.kt
+@@ -3,11 +3,11 @@ package com.willfp.ecoenchants.integrations.plugins
+ import com.willfp.ecoenchants.integrations.EnchantRegistrationIntegration
+ import net.Zrips.CMILib.Enchants.CMIEnchantment
+ 
+-class CMIIntegration: EnchantRegistrationIntegration {
++object CMIIntegration: EnchantRegistrationIntegration {
+     override fun registerEnchants() {
+         CMIEnchantment.initialize()
+         CMIEnchantment.saveEnchants()
+     }
+ 
+     override fun getPluginName() = "CMI"
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/integrations/plugins/EssentialsIntegration.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/integrations/plugins/EssentialsIntegration.kt
+index 81ed90ce..5d77cae7 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/integrations/plugins/EssentialsIntegration.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/integrations/plugins/EssentialsIntegration.kt
+@@ -7,7 +7,7 @@ import com.willfp.ecoenchants.integrations.EnchantRegistrationIntegration
+ import org.bukkit.enchantments.Enchantment
+ 
+ @Suppress("UNCHECKED_CAST")
+-class EssentialsIntegration : EnchantRegistrationIntegration {
++object EssentialsIntegration : EnchantRegistrationIntegration {
+     override fun registerEnchants() {
+         for (enchantment in EcoEnchants.values()) {
+             // why aren't you using the api you PRd in
+@@ -39,4 +39,4 @@ class EssentialsIntegration : EnchantRegistrationIntegration {
+     }
+ 
+     override fun getPluginName() = "Essentials"
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/libreforge/TriggerEnchantType.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/libreforge/TriggerEnchantType.kt
+index 4e039930..71f616f1 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/libreforge/TriggerEnchantType.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/libreforge/TriggerEnchantType.kt
+@@ -1,8 +1,8 @@
+ package com.willfp.ecoenchants.libreforge
+ 
+-import com.willfp.eco.core.EcoPlugin
+ import com.willfp.eco.core.fast.fast
+ import com.willfp.ecoenchants.enchant.wrap
++import com.willfp.ecoenchants.plugin
+ import com.willfp.ecoenchants.type.EnchantmentType
+ import com.willfp.libreforge.toDispatcher
+ import com.willfp.libreforge.triggers.Trigger
+@@ -13,7 +13,6 @@ import org.bukkit.event.EventPriority
+ import org.bukkit.event.enchantment.EnchantItemEvent
+ 
+ class TriggerEnchantType(
+-    private val plugin: EcoPlugin,
+     private val type: EnchantmentType
+ ) : Trigger("enchant_${type.id}") {
+     override val parameters = setOf(
+@@ -28,23 +27,28 @@ class TriggerEnchantType(
+     fun handleLevelling(event: EnchantItemEvent) {
+         val player = event.enchanter
+ 
+-        plugin.scheduler.runLater({
+-            if (
+-                event.item.fast().getEnchants(true).keys
+-                    .map { it.wrap() }
+-                    .any { it.type == type }
+-            ) {
+-                this.dispatch(
+-                    player.toDispatcher(),
+-                    TriggerData(
+-                        player = player,
+-                        location = player.location,
+-                        item = event.item,
+-                        value = event.expLevelCost.toDouble(),
+-                        text = type.id
++        player.scheduler.runDelayed(
++            plugin,
++            {
++                if (
++                    event.item.fast().getEnchants(true).keys
++                        .map { it.wrap() }
++                        .any { it.type == type }
++                ) {
++                    this.dispatch(
++                        player.toDispatcher(),
++                        TriggerData(
++                            player = player,
++                            location = player.location,
++                            item = event.item,
++                            value = event.expLevelCost.toDouble(),
++                            text = type.id
++                        )
+                     )
+-                )
+-            }
+-        }, 2)
++                }
++            },
++            {},
++            2
++        )
+     }
+ }
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/AnvilSupport.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/AnvilSupport.kt
+index 845ca1ed..f4759bb1 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/AnvilSupport.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/AnvilSupport.kt
+@@ -1,22 +1,27 @@
+ package com.willfp.ecoenchants.mechanics
+ 
+-import com.willfp.eco.core.EcoPlugin
+ import com.willfp.eco.core.fast.fast
+ import com.willfp.eco.core.proxy.ProxyConstants
+ import com.willfp.eco.util.StringUtils
+ import com.willfp.ecoenchants.enchant.EcoEnchants
+ import com.willfp.ecoenchants.enchant.wrap
++import com.willfp.ecoenchants.plugin
+ import org.bukkit.Material
+ import org.bukkit.Tag
+ import org.bukkit.entity.Player
+ import org.bukkit.event.EventHandler
+ import org.bukkit.event.EventPriority
+ import org.bukkit.event.Listener
++import org.bukkit.event.inventory.InventoryClickEvent
++import org.bukkit.event.inventory.InventoryCloseEvent
+ import org.bukkit.event.inventory.PrepareAnvilEvent
++import org.bukkit.event.player.PlayerQuitEvent
++import org.bukkit.inventory.AnvilInventory
+ import org.bukkit.inventory.ItemStack
+ import org.bukkit.inventory.meta.Damageable
+ import org.bukkit.inventory.meta.EnchantmentStorageMeta
+ import java.util.UUID
++import java.util.concurrent.ConcurrentHashMap
+ import kotlin.math.abs
+ import kotlin.math.ceil
+ import kotlin.math.max
+@@ -37,24 +42,236 @@ interface OpenInventoryProxy {
+     fun getOpenInventory(player: Player): Any
+ }
+ 
+-class AnvilSupport(
+-    private val plugin: EcoPlugin
+-) : Listener {
+-    /**
+-     * Map to prevent incrementing cost several times as inventory events are fired 3 times.
+-     */
+-    private val antiRepeat = mutableSetOf<UUID>()
++private val repair = mutableMapOf<Collection<Material>, Collection<Material>>(
++    Pair(
++        Tag.PLANKS.values,
++        listOf(
++            Material.WOODEN_SWORD,
++            Material.WOODEN_PICKAXE,
++            Material.WOODEN_AXE,
++            Material.WOODEN_SHOVEL,
++            Material.WOODEN_HOE,
++            Material.SHIELD
++        )
++    ),
++    Pair(
++        listOf(Material.LEATHER),
++        listOf(
++            Material.LEATHER_HELMET,
++            Material.LEATHER_CHESTPLATE,
++            Material.LEATHER_LEGGINGS,
++            Material.LEATHER_BOOTS
++        )
++    ),
++    Pair(
++        listOf(
++            Material.COBBLESTONE,
++            Material.COBBLED_DEEPSLATE,
++            Material.BLACKSTONE
++        ),
++        listOf(
++            Material.STONE_SWORD,
++            Material.STONE_PICKAXE,
++            Material.STONE_AXE,
++            Material.STONE_SHOVEL,
++            Material.STONE_HOE
++        )
++    ),
++    Pair(
++        listOf(
++            Material.IRON_INGOT
++        ),
++        listOf(
++            Material.IRON_HELMET,
++            Material.IRON_CHESTPLATE,
++            Material.IRON_LEGGINGS,
++            Material.IRON_BOOTS,
++            Material.CHAINMAIL_HELMET,
++            Material.CHAINMAIL_CHESTPLATE,
++            Material.CHAINMAIL_LEGGINGS,
++            Material.CHAINMAIL_BOOTS,
++            Material.IRON_SWORD,
++            Material.IRON_PICKAXE,
++            Material.IRON_AXE,
++            Material.IRON_SHOVEL,
++            Material.IRON_HOE
++        )
++    ),
++    Pair(
++        listOf(
++            Material.GOLD_INGOT
++        ),
++        listOf(
++            Material.GOLDEN_HELMET,
++            Material.GOLDEN_CHESTPLATE,
++            Material.GOLDEN_LEGGINGS,
++            Material.GOLDEN_BOOTS,
++            Material.GOLDEN_SWORD,
++            Material.GOLDEN_PICKAXE,
++            Material.GOLDEN_AXE,
++            Material.GOLDEN_SHOVEL,
++            Material.GOLDEN_HOE
++        )
++    ),
++    Pair(
++        listOf(
++            Material.DIAMOND
++        ),
++        listOf(
++            Material.DIAMOND_HELMET,
++            Material.DIAMOND_CHESTPLATE,
++            Material.DIAMOND_LEGGINGS,
++            Material.DIAMOND_BOOTS,
++            Material.DIAMOND_SWORD,
++            Material.DIAMOND_PICKAXE,
++            Material.DIAMOND_AXE,
++            Material.DIAMOND_SHOVEL,
++            Material.DIAMOND_HOE
++        )
++    ),
++    Pair(
++        listOf(
++            Material.NETHERITE_INGOT
++        ),
++        listOf(
++            Material.NETHERITE_HELMET,
++            Material.NETHERITE_CHESTPLATE,
++            Material.NETHERITE_LEGGINGS,
++            Material.NETHERITE_BOOTS,
++            Material.NETHERITE_SWORD,
++            Material.NETHERITE_PICKAXE,
++            Material.NETHERITE_AXE,
++            Material.NETHERITE_SHOVEL,
++            Material.NETHERITE_HOE
++        )
++    ),
++    Pair(
++        listOf(
++            Material.TURTLE_SCUTE
++        ),
++        listOf(
++            Material.TURTLE_HELMET
++        )
++    ),
++    Pair(
++        listOf(
++            Material.PHANTOM_MEMBRANE
++        ),
++        listOf(
++            Material.ELYTRA
++        )
++    )
++)
++
++object AnvilSupport : Listener {
++    init {
++        if (is_1_21_11() && repair[Tag.PLANKS.values]?.contains(Material.WOODEN_SPEAR) != true) {
++
++            repair[Tag.PLANKS.values] = repair[Tag.PLANKS.values]!! + listOf(
++                Material.WOODEN_SPEAR
++            )
++
++            repair[listOf(Material.COBBLESTONE, Material.COBBLED_DEEPSLATE, Material.BLACKSTONE)] =
++                repair[listOf(Material.COBBLESTONE, Material.COBBLED_DEEPSLATE, Material.BLACKSTONE)]!! + listOf(
++                    Material.STONE_SPEAR
++                )
++
++            repair[listOf(Material.COPPER_INGOT)] = listOf(
++                Material.COPPER_HELMET,
++                Material.COPPER_CHESTPLATE,
++                Material.COPPER_LEGGINGS,
++                Material.COPPER_BOOTS,
++                Material.COPPER_SWORD,
++                Material.COPPER_PICKAXE,
++                Material.COPPER_AXE,
++                Material.COPPER_SHOVEL,
++                Material.COPPER_HOE,
++                Material.COPPER_SPEAR
++            )
++
++            repair[listOf(Material.IRON_INGOT)] = repair[listOf(Material.IRON_INGOT)]!! + listOf(
++                Material.IRON_SPEAR
++            )
++
++            repair[listOf(Material.GOLD_INGOT)] = repair[listOf(Material.GOLD_INGOT)]!! + listOf(
++                Material.GOLDEN_SPEAR
++            )
++
++            repair[listOf(Material.DIAMOND)] = repair[listOf(Material.DIAMOND)]!! + listOf(
++                Material.DIAMOND_SPEAR
++            )
++
++            repair[listOf(Material.NETHERITE_INGOT)] = repair[listOf(Material.NETHERITE_INGOT)]!! + listOf(
++                Material.NETHERITE_SPEAR
++            )
++        }
++    }
++
++    private val latestPreviewGeneration = ConcurrentHashMap<UUID, Int>()
++
++    private val renderedPreviewGeneration = ConcurrentHashMap<UUID, Int>()
+ 
+     /**
+      * Class for AnvilGUI wrappers to ignore them.
+      */
+-    private val anvilGuiClass = "net.wesjd.anvilgui.version.Wrapper" +
+-            ProxyConstants.NMS_VERSION.substring(1) +
+-            "\$AnvilContainer"
++    private val anvilGuiClass: Class<*>? = try {
++        Class.forName(
++            "net.wesjd.anvilgui.version.Wrapper" +
++                    ProxyConstants.NMS_VERSION.substring(1) +
++                    $$"$AnvilContainer"
++        )
++    } catch (_: ClassNotFoundException) {
++        null
++    }
++
++    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
++    fun onAnvilResultClick(event: InventoryClickEvent) {
++        val player = event.whoClicked as? Player ?: return
++        val inventory = event.view.topInventory as? AnvilInventory ?: return
++
++        if (event.rawSlot != 2) {
++            return
++        }
+ 
++        if (plugin.getProxy(OpenInventoryProxy::class.java)
++                .getOpenInventory(player)::class.java == anvilGuiClass
++        ) {
++            return
++        }
++
++        val latestGeneration = latestPreviewGeneration[player.uniqueId] ?: return
++        val renderedGeneration = renderedPreviewGeneration[player.uniqueId]
++
++        if (latestGeneration == renderedGeneration) {
++            return
++        }
++
++        event.isCancelled = true
++        event.currentItem = null
++        inventory.setItem(2, null)
++    }
++
++    @EventHandler
++    fun onAnvilClose(event: InventoryCloseEvent) {
++        val player = event.player as? Player ?: return
++
++        latestPreviewGeneration.remove(player.uniqueId)
++        renderedPreviewGeneration.remove(player.uniqueId)
++    }
++
++    @EventHandler
++    fun onQuit(event: PlayerQuitEvent) {
++        latestPreviewGeneration.remove(event.player.uniqueId)
++        renderedPreviewGeneration.remove(event.player.uniqueId)
++    }
++
++    @Suppress("UnstableApiUsage")
+     @EventHandler(priority = EventPriority.HIGHEST)
+     fun onAnvilPrepare(event: PrepareAnvilEvent) {
+         val player = event.viewers.getOrNull(0) as? Player ?: return
++        val generation = (latestPreviewGeneration[player.uniqueId] ?: 0) + 1
++        latestPreviewGeneration[player.uniqueId] = generation
++        renderedPreviewGeneration.remove(player.uniqueId)
+         val permanenceCurse = EcoEnchants.getByID("permanence_curse")
+         val leftItem = event.inventory.getItem(0)
+         val rightItem = event.inventory.getItem(1)
+@@ -68,28 +285,26 @@ class AnvilSupport(
+             }
+         }
+ 
+-        if (this.plugin.getProxy(OpenInventoryProxy::class.java)
+-                .getOpenInventory(player)::class.java.toString() == anvilGuiClass
++        if (plugin.getProxy(OpenInventoryProxy::class.java)
++                .getOpenInventory(player)::class.java == anvilGuiClass
+         ) {
+             return
+         }
+ 
+-        if (antiRepeat.contains(player.uniqueId)) {
+-            return
+-        }
++        val baseRepairCost = event.view.repairCost
+ 
+-        antiRepeat.add(player.uniqueId)
++        event.result = null
++        event.inventory.setItem(2, null)
+ 
+-        this.plugin.scheduler.run {
+-            antiRepeat.remove(player.uniqueId)
++        player.scheduler.run {
++            if (latestPreviewGeneration[player.uniqueId] != generation) {
++                return@run
++            }
+ 
+             val left = event.inventory.getItem(0)?.clone()
+             val old = left?.clone()
+             val right = event.inventory.getItem(1)?.clone()
+ 
+-            event.result = null
+-            event.inventory.setItem(2, null)
+-
+             val result = doMerge(
+                 left,
+                 right,
+@@ -98,18 +313,18 @@ class AnvilSupport(
+                 player
+             )
+ 
++            if (result == FAIL) {
++                return@run
++            }
++
++            event.result = null
++            event.inventory.setItem(2, null)
++
+             val price = result.xp ?: 0
+             val outItem = result.result ?: ItemStack(Material.AIR)
+ 
+-            @Suppress("REMOVAL", "DEPRECATION")
+-            val oldCost = event.inventory.repairCost
+-
+             val oldLeft = event.inventory.getItem(0)
+ 
+-            if (result == FAIL) {
+-                return@run
+-            }
+-
+             if (oldLeft == null || oldLeft.type != outItem.type) {
+                 return@run
+             }
+@@ -118,10 +333,10 @@ class AnvilSupport(
+                 return@run
+             }
+ 
+-            var cost = oldCost + price
++            var cost = baseRepairCost + price
+ 
+             // Unbelievably specific edge case
+-            if (oldCost == -price) {
++            if (baseRepairCost == -price) {
+                 cost = price
+             }
+ 
+@@ -145,13 +360,27 @@ class AnvilSupport(
+                 outItem.fast().repairCost = (repairCost + 1) * 2 - 1
+             }
+ 
+-            @Suppress("REMOVAL", "DEPRECATION")
+-            event.inventory.maximumRepairCost = plugin.configYml.getInt("anvil.max-repair-cost").infiniteIfNegative()
++            val clampRepairCost = plugin.configYml.getBool("anvil.clamp-repair-cost")
++            val maxRepairCost = plugin.configYml.getInt("anvil.max-repair-cost")
++
++            if (latestPreviewGeneration[player.uniqueId] != generation) {
++                return@run
++            }
++
++            event.view.maximumRepairCost = maxRepairCost
++            event.view.repairCost = if (clampRepairCost) cost.coerceAtMost(maxRepairCost) else cost
++
++            if (!clampRepairCost && maxRepairCost > 0 && cost >= maxRepairCost) {
++                return@run
++            }
++
++            if (latestPreviewGeneration[player.uniqueId] != generation) {
++                return@run
++            }
+ 
+-            @Suppress("REMOVAL", "DEPRECATION")
+-            event.inventory.repairCost = cost
+             event.result = outItem
+             event.inventory.setItem(2, outItem)
++            renderedPreviewGeneration[player.uniqueId] = generation
+         }
+     }
+ 
+@@ -230,7 +459,7 @@ class AnvilSupport(
+                 }
+             } else {
+                 // Running .wrap() to use EcoEnchantLike canEnchantItem logic
+-                if (enchant.wrap().canEnchantItem(left)) {
++                if (enchant.wrap().canEnchantItem(left, outEnchants.keys)) {
+                     if (outEnchants.size < plugin.configYml.getInt("anvil.enchant-limit").infiniteIfNegative()) {
+                         outEnchants[enchant] = level
+                     }
+@@ -244,7 +473,7 @@ class AnvilSupport(
+             val maxDamage = left.type.maxDurability.toInt()
+             val leftDurability = maxDamage - leftMeta.damage
+             val rightDurability = maxDamage - rightMeta.damage
+-            val damage = maxDamage - max(maxDamage, leftDurability + rightDurability)
++            val damage = maxDamage - min(maxDamage, leftDurability + rightDurability)
+ 
+             leftMeta.damage = damage.coerceAtLeast(0) // Prevent negative damage
+         }
+@@ -277,127 +506,14 @@ class AnvilSupport(
+     }
+ }
+ 
+-
+-private val repair = mapOf<Collection<Material>, Collection<Material>>(
+-    Pair(
+-        Tag.PLANKS.values,
+-        listOf(
+-            Material.WOODEN_SWORD,
+-            Material.WOODEN_PICKAXE,
+-            Material.WOODEN_AXE,
+-            Material.WOODEN_SHOVEL,
+-            Material.WOODEN_HOE,
+-            Material.SHIELD
+-        )
+-    ),
+-    Pair(
+-        listOf(Material.LEATHER),
+-        listOf(
+-            Material.LEATHER_HELMET,
+-            Material.LEATHER_CHESTPLATE,
+-            Material.LEATHER_LEGGINGS,
+-            Material.LEATHER_BOOTS
+-        )
+-    ),
+-    Pair(
+-        listOf(
+-            Material.COBBLESTONE,
+-            Material.COBBLED_DEEPSLATE,
+-            Material.BLACKSTONE
+-        ),
+-        listOf(
+-            Material.STONE_SWORD,
+-            Material.STONE_PICKAXE,
+-            Material.STONE_AXE,
+-            Material.STONE_SHOVEL,
+-            Material.STONE_HOE
+-        )
+-    ),
+-    Pair(
+-        listOf(
+-            Material.IRON_INGOT
+-        ),
+-        listOf(
+-            Material.IRON_HELMET,
+-            Material.IRON_CHESTPLATE,
+-            Material.IRON_LEGGINGS,
+-            Material.IRON_BOOTS,
+-            Material.CHAINMAIL_HELMET,
+-            Material.CHAINMAIL_CHESTPLATE,
+-            Material.CHAINMAIL_LEGGINGS,
+-            Material.CHAINMAIL_BOOTS,
+-            Material.IRON_SWORD,
+-            Material.IRON_PICKAXE,
+-            Material.IRON_AXE,
+-            Material.IRON_SHOVEL,
+-            Material.IRON_HOE
+-        )
+-    ),
+-    Pair(
+-        listOf(
+-            Material.GOLD_INGOT
+-        ),
+-        listOf(
+-            Material.GOLDEN_HELMET,
+-            Material.GOLDEN_CHESTPLATE,
+-            Material.GOLDEN_LEGGINGS,
+-            Material.GOLDEN_BOOTS,
+-            Material.GOLDEN_SWORD,
+-            Material.GOLDEN_PICKAXE,
+-            Material.GOLDEN_AXE,
+-            Material.GOLDEN_SHOVEL,
+-            Material.GOLDEN_HOE
+-        )
+-    ),
+-    Pair(
+-        listOf(
+-            Material.DIAMOND
+-        ),
+-        listOf(
+-            Material.DIAMOND_HELMET,
+-            Material.DIAMOND_CHESTPLATE,
+-            Material.DIAMOND_LEGGINGS,
+-            Material.DIAMOND_BOOTS,
+-            Material.DIAMOND_SWORD,
+-            Material.DIAMOND_PICKAXE,
+-            Material.DIAMOND_AXE,
+-            Material.DIAMOND_SHOVEL,
+-            Material.DIAMOND_HOE
+-        )
+-    ),
+-    Pair(
+-        listOf(
+-            Material.NETHERITE_INGOT
+-        ),
+-        listOf(
+-            Material.NETHERITE_HELMET,
+-            Material.NETHERITE_CHESTPLATE,
+-            Material.NETHERITE_LEGGINGS,
+-            Material.NETHERITE_BOOTS,
+-            Material.NETHERITE_SWORD,
+-            Material.NETHERITE_PICKAXE,
+-            Material.NETHERITE_AXE,
+-            Material.NETHERITE_SHOVEL,
+-            Material.NETHERITE_HOE
+-        )
+-    ),
+-    Pair(
+-        listOf(
+-            Material.TURTLE_SCUTE
+-        ),
+-        listOf(
+-            Material.TURTLE_HELMET
+-        )
+-    ),
+-    Pair(
+-        listOf(
+-            Material.PHANTOM_MEMBRANE
+-        ),
+-        listOf(
+-            Material.ELYTRA
+-        )
+-    )
+-)
++private fun is_1_21_11(): Boolean {
++    return try {
++        Material.IRON_SPEAR
++        true
++    } catch (_: NoSuchFieldError) {
++        false
++    }
++}
+ 
+ fun Material.canUnitRepair(other: Material): Boolean {
+     for ((units, repairable) in repair) {
+@@ -407,4 +523,4 @@ fun Material.canUnitRepair(other: Material): Boolean {
+     }
+ 
+     return false
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/BedrockBookApplySupport.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/BedrockBookApplySupport.kt
+new file mode 100644
+index 00000000..1c350988
+--- /dev/null
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/BedrockBookApplySupport.kt
+@@ -0,0 +1,263 @@
++package com.willfp.ecoenchants.mechanics
++
++import com.willfp.eco.core.drops.DropQueue
++import com.willfp.eco.core.fast.fast
++import com.willfp.ecoenchants.enchant.EcoEnchants
++import com.willfp.ecoenchants.enchant.wrap
++import com.willfp.ecoenchants.plugin
++import org.bukkit.Bukkit
++import org.bukkit.Material
++import org.bukkit.Sound
++import org.bukkit.enchantments.Enchantment
++import org.bukkit.entity.Player
++import org.bukkit.event.EventHandler
++import org.bukkit.event.EventPriority
++import org.bukkit.event.Listener
++import org.bukkit.event.inventory.InventoryCloseEvent
++import org.bukkit.event.inventory.PrepareAnvilEvent
++import org.bukkit.event.player.PlayerQuitEvent
++import org.bukkit.inventory.ItemStack
++import org.geysermc.cumulus.form.ModalForm
++import org.geysermc.floodgate.api.FloodgateApi
++import java.util.UUID
++import java.util.concurrent.ConcurrentHashMap
++import java.util.function.Consumer
++
++/**
++ * Bedrock-only anvil workaround.
++ *
++ * Bedrock (Geyser) clients render the anvil output client-side and ignore the server-authoritative
++ * result, so custom EcoEnchants applied via the anvil never appear for them. We also can't show a
++ * Floodgate form over the open anvil (it just queues) nor force the client anvil closed from the
++ * server (the Bedrock anvil UI is client-authoritative).
++ *
++ * So: when a Bedrock player places a target item + an enchanted book with an applicable custom
++ * enchantment in an anvil, we take the inputs into custody. A native confirmation form is then sent;
++ * because Bedrock holds it behind the open anvil, it appears once the player closes the anvil. On
++ * confirm the enchantment is applied (free, one book consumed) and the item handed back via
++ * telekinesis; on cancel/dismiss the items are returned untouched.
++ */
++object BedrockBookApplySupport : Listener {
++    // Ticks to wait after taking the items before sending the form (lets the anvil state settle).
++    private const val FORM_DELAY_TICKS = 10L
++
++    private val colorCodes = Regex("[§&][0-9A-Fa-fK-Ok-oRr]")
++
++    // Items taken into custody while a confirmation form is open, keyed by player.
++    private class Pending(
++        val target: ItemStack,
++        val book: ItemStack,
++        val enchants: Map<Enchantment, Int>
++    )
++
++    private val pending = ConcurrentHashMap<UUID, Pending>()
++
++    // Debounce so the form is only offered once per distinct item+book combination.
++    private val promptedAnvilSignature = ConcurrentHashMap<UUID, Int>()
++
++    private val floodgatePresent: Boolean by lazy {
++        Bukkit.getPluginManager().getPlugin("floodgate") != null
++    }
++
++    private fun isBedrock(player: Player): Boolean {
++        if (!floodgatePresent) {
++            return false
++        }
++
++        return try {
++            FloodgateApi.getInstance().isFloodgatePlayer(player.uniqueId)
++        } catch (_: Throwable) {
++            false
++        }
++    }
++
++    /**
++     * The custom (EcoEnchants) enchantments on [book] that [target] can receive and doesn't already have.
++     */
++    private fun applicableEnchants(target: ItemStack, book: ItemStack): Map<Enchantment, Int> {
++        if (book.type != Material.ENCHANTED_BOOK) {
++            return emptyMap()
++        }
++
++        if (target.type == Material.AIR || target.type == Material.ENCHANTED_BOOK || target.type == Material.BOOK) {
++            return emptyMap()
++        }
++
++        val existing = target.fast().getEnchants(true).keys
++        return book.fast().getEnchants(true).filter { (enchant, _) ->
++            EcoEnchants.getByID(enchant.key.key) != null &&     // only custom EcoEnchants
++                    enchant !in existing &&                     // not already on the item
++                    enchant.wrap().canEnchantItem(target)       // valid target, conflicts, limits
++        }
++    }
++
++    @EventHandler(priority = EventPriority.MONITOR)
++    fun onAnvilCombine(event: PrepareAnvilEvent) {
++        val player = event.viewers.getOrNull(0) as? Player ?: return
++
++        if (!isBedrock(player) || pending.containsKey(player.uniqueId)) {
++            return
++        }
++
++        val item = event.inventory.getItem(0)
++        val book = event.inventory.getItem(1)
++
++        if (item == null || book == null) {
++            promptedAnvilSignature.remove(player.uniqueId)
++            return
++        }
++
++        if (applicableEnchants(item, book).isEmpty()) {
++            promptedAnvilSignature.remove(player.uniqueId)
++            return
++        }
++
++        // Only offer once per distinct input combination.
++        val signature = 31 * item.hashCode() + book.hashCode()
++        if (promptedAnvilSignature[player.uniqueId] == signature) {
++            return
++        }
++        promptedAnvilSignature[player.uniqueId] = signature
++
++        val inventory = event.inventory
++
++        // Defer one tick so we can safely mutate the anvil, then take items + queue the form.
++        player.scheduler.run {
++            if (pending.containsKey(player.uniqueId)) {
++                return@run
++            }
++
++            val curItem = inventory.getItem(0) ?: return@run
++            val curBook = inventory.getItem(1) ?: return@run
++            val applicable = applicableEnchants(curItem, curBook)
++            if (applicable.isEmpty()) {
++                return@run
++            }
++
++            val target = curItem.clone()
++            val bookClone = curBook.clone().apply { amount = 1 }
++
++            // Take the item and one book out of the anvil. Any remaining books are left in the anvil
++            // and returned to the player when it closes.
++            inventory.setItem(0, null)
++            val remaining = curBook.amount - 1
++            inventory.setItem(1, if (remaining <= 0) null else curBook.clone().apply { amount = remaining })
++
++            pending[player.uniqueId] = Pending(target, bookClone, applicable)
++
++            player.scheduler.runDelayed(
++                plugin,
++                {
++                    if (pending.containsKey(player.uniqueId)) {
++                        sendConfirmation(player, applicable)
++                    }
++                },
++                {},
++                FORM_DELAY_TICKS
++            )
++        }
++    }
++
++    private fun confirm(player: Player) {
++        player.scheduler.run {
++            val p = pending.remove(player.uniqueId) ?: return@run
++
++            val existing = p.target.fast().getEnchants(true).keys
++            val valid = p.enchants.filter { (enchant, _) ->
++                enchant !in existing && enchant.wrap().canEnchantItem(p.target)
++            }
++
++            if (valid.isEmpty()) {
++                // Shouldn't happen, but never eat the items.
++                give(player, p.target, p.book)
++                return@run
++            }
++
++            val meta = p.target.itemMeta
++            if (meta == null) {
++                give(player, p.target, p.book)
++                return@run
++            }
++            for ((enchant, level) in valid) {
++                meta.addEnchant(enchant, level, true)
++            }
++            p.target.itemMeta = meta
++
++            // One book was consumed; hand back the enchanted item.
++            give(player, p.target)
++            player.playSound(player.location, Sound.BLOCK_ANVIL_USE, 1.0f, 1.0f)
++        }
++    }
++
++    private fun returnItems(player: Player) {
++        player.scheduler.run {
++            val p = pending.remove(player.uniqueId) ?: return@run
++            give(player, p.target, p.book)
++        }
++    }
++
++    private fun give(player: Player, vararg items: ItemStack?) {
++        val list = items.filterNotNull().filter { it.type != Material.AIR && it.amount > 0 }
++        if (list.isEmpty()) {
++            return
++        }
++
++        DropQueue(player)
++            .addItems(list)
++            .forceTelekinesis()
++            .push()
++    }
++
++    private fun sendConfirmation(player: Player, applicable: Map<Enchantment, Int>) {
++        val content = buildString {
++            append("§7¿Aplicar los siguientes encantamientos a tu objeto?\n\n")
++            for ((enchant, level) in applicable) {
++                val name = colorCodes.replace(enchant.wrap().rawDisplayName, "").trim()
++                append("§f• $name §7(nivel $level)\n")
++            }
++            append("\n§8Se consumirá el libro.")
++        }
++
++        val form = ModalForm.builder()
++            .title("§5Aplicar Encantamiento")
++            .content(content)
++            .button1("§aConfirmar")
++            .button2("§cCancelar")
++            .validResultHandler(Consumer { response ->
++                if (response.clickedButtonId() == 0) {
++                    confirm(player)
++                } else {
++                    returnItems(player)
++                }
++            })
++            // If the player dismisses the form, hand the items back so nothing is lost.
++            .closedOrInvalidResultHandler(Runnable { returnItems(player) })
++            .build()
++
++        FloodgateApi.getInstance().sendForm(player.uniqueId, form)
++    }
++
++    @EventHandler
++    fun onClose(event: InventoryCloseEvent) {
++        promptedAnvilSignature.remove(event.player.uniqueId)
++    }
++
++    @EventHandler
++    fun onQuit(event: PlayerQuitEvent) {
++        promptedAnvilSignature.remove(event.player.uniqueId)
++
++        // Never lose items held in custody: put them back in the inventory (saved on quit), dropping
++        // only what genuinely doesn't fit.
++        val p = pending.remove(event.player.uniqueId) ?: return
++        val player = event.player
++        val leftover = player.inventory.addItem(p.target, p.book)
++        if (leftover.isNotEmpty()) {
++            val location = player.location
++            location.world?.let { world ->
++                for (item in leftover.values) {
++                    world.dropItemNaturally(location, item)
++                }
++            }
++        }
++    }
++}
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/EnchantingTableChanceGenerateEvent.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/EnchantingTableChanceGenerateEvent.kt
+index b8131a01..e031bad8 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/EnchantingTableChanceGenerateEvent.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/EnchantingTableChanceGenerateEvent.kt
+@@ -20,4 +20,4 @@ class EnchantingTableChanceGenerateEvent(
+         @JvmStatic
+         fun getHandlerList() = HANDLERS
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/EnchantingTableSupport.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/EnchantingTableSupport.kt
+index 4758ebac..2e9b4de2 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/EnchantingTableSupport.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/EnchantingTableSupport.kt
+@@ -5,10 +5,8 @@ import com.willfp.eco.core.items.TestableItem
+ import com.willfp.eco.core.recipe.parts.EmptyTestableItem
+ import com.willfp.eco.util.NumberUtils
+ import com.willfp.eco.util.randDouble
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+-import com.willfp.ecoenchants.enchant.EcoEnchant
+ import com.willfp.ecoenchants.enchant.EcoEnchants
+-import com.willfp.ecoenchants.enchant.conflictsWithDeep
++import com.willfp.ecoenchants.plugin
+ import org.bukkit.Bukkit
+ import org.bukkit.GameMode
+ import org.bukkit.Material
+@@ -21,14 +19,12 @@ import org.bukkit.event.enchantment.PrepareItemEnchantEvent
+ import org.bukkit.event.player.PlayerQuitEvent
+ import org.bukkit.inventory.meta.EnchantmentStorageMeta
+ import java.util.UUID
++import java.util.concurrent.ConcurrentHashMap
+ import kotlin.math.ceil
+ import kotlin.math.floor
+ import kotlin.math.min
+ 
+-
+-class EnchantingTableSupport(
+-    private val plugin: EcoEnchantsPlugin
+-) : Listener {
++object EnchantingTableSupport : Listener {
+     @EventHandler
+     fun onLeave(event: PlayerQuitEvent) {
+         ExtraItemSupport.currentlyEnchantingExtraItem.remove(event.player.uniqueId)
+@@ -86,7 +82,7 @@ class EnchantingTableSupport(
+                 continue
+             }
+ 
+-            if (!enchantment.canEnchantItem(item)) {
++            if (!enchantment.canEnchantItem(item, toAdd.keys)) {
+                 continue
+             }
+ 
+@@ -107,7 +103,7 @@ class EnchantingTableSupport(
+                 continue
+             }
+ 
+-            if (toAdd.size >= this.plugin.configYml.getInt("enchanting-table.cap")) {
++            if (toAdd.size >= plugin.configYml.getInt("enchanting-table.cap")) {
+                 break
+             }
+ 
+@@ -115,16 +111,6 @@ class EnchantingTableSupport(
+                 break
+             }
+ 
+-            if (toAdd.any { (it, _) -> enchantment.enchantment.conflictsWithDeep(it) }) {
+-                continue
+-            }
+-
+-            if (
+-                toAdd.keys.filterIsInstance<EcoEnchant>()
+-                    .count { it.type == enchantment.type } >= enchantment.type.limit
+-            ) {
+-                continue
+-            }
+ 
+             val maxLevel = enchantment.maximumLevel
+             val maxObtainableLevel = plugin.configYml.getInt("enchanting-table.maximum-obtainable-level")
+@@ -139,7 +125,7 @@ class EnchantingTableSupport(
+             val levelPart3 = NumberUtils.bias(levelPart2, enchantment.type.highLevelBias)
+             val level = ceil(levelPart3 * maxLevel).coerceIn(1.0..maxLevel.toDouble()).toInt()
+ 
+-            multiplier /= this.plugin.configYml.getDouble("enchanting-table.reduction")
++            multiplier /= plugin.configYml.getDouble("enchanting-table.reduction")
+ 
+             toAdd[enchantment.enchantment] = level
+         }
+@@ -147,15 +133,19 @@ class EnchantingTableSupport(
+         toAdd.forEach(event.enchantsToAdd::putIfAbsent)
+ 
+         if (toAdd.isEmpty() && isExtraEnchantable) {
+-            toAdd[Enchantment.UNBREAKING] =
+-                ExtraItemSupport.currentlyEnchantingExtraItem[player.uniqueId]!![event.whichButton()]
+-            ExtraItemSupport.currentlyEnchantingExtraItem.remove(player.uniqueId)
++            val extraLevels = ExtraItemSupport.currentlyEnchantingExtraItem.remove(player.uniqueId)
++            if (extraLevels != null) {
++                toAdd[Enchantment.UNBREAKING] = extraLevels[event.whichButton()]
++            } else {
++                event.isCancelled = true
++                return
++            }
+         }
+ 
+         // I remember writing this back in 8.x.x and deleting it during the recode
+         // It's here because books don't work with this event, for some reason
+         if (item.type == Material.ENCHANTED_BOOK) {
+-            plugin.scheduler.run {
++            player.scheduler.run {
+                 if (!event.isCancelled) {
+                     val postEnchantItem = event.inventory.getItem(0)
+                     val meta = postEnchantItem?.itemMeta as? EnchantmentStorageMeta
+@@ -235,14 +225,14 @@ class EnchantingTableSupport(
+ }
+ 
+ object ExtraItemSupport {
+-    internal val currentlyEnchantingExtraItem = mutableMapOf<UUID, Array<Int>>()
++    internal val currentlyEnchantingExtraItem = ConcurrentHashMap<UUID, Array<Int>>()
+ 
+     internal val extraEnchantableItems = mutableListOf<TestableItem>()
+ 
+-    internal fun reload(plugin: EcoEnchantsPlugin) {
++    internal fun reload() {
+         extraEnchantableItems.clear()
+         extraEnchantableItems.addAll(plugin.targetsYml.getStrings("extra-enchantable-items").map {
+             Items.lookup(it)
+         }.filterNot { it is EmptyTestableItem })
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/GrindstoneSupport.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/GrindstoneSupport.kt
+index e52adc86..29fd9219 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/GrindstoneSupport.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/GrindstoneSupport.kt
+@@ -1,9 +1,9 @@
+ package com.willfp.ecoenchants.mechanics
+ 
+-import com.willfp.eco.core.EcoPlugin
+ import com.willfp.eco.core.fast.fast
+ import com.willfp.eco.core.gui.player
+ import com.willfp.ecoenchants.enchant.wrap
++import com.willfp.ecoenchants.plugin
+ import org.bukkit.enchantments.Enchantment
+ import org.bukkit.entity.ExperienceOrb
+ import org.bukkit.event.EventHandler
+@@ -11,19 +11,16 @@ import org.bukkit.event.Listener
+ import org.bukkit.event.inventory.InventoryClickEvent
+ import org.bukkit.inventory.GrindstoneInventory
+ import org.bukkit.inventory.meta.EnchantmentStorageMeta
+-import java.util.*
+ import kotlin.math.max
+ 
+ @Suppress("DEPRECATION")
+-class GrindstoneSupport(
+-    private val plugin: EcoPlugin
+-) : Listener {
++object GrindstoneSupport : Listener {
+     @EventHandler
+     fun preGrindstone(event: InventoryClickEvent) {
+         val inventory = event.view.topInventory as? GrindstoneInventory ?: return
+ 
+         // Run everything later to await event completion
+-        plugin.scheduler.run {
++        event.player.scheduler.run {
+             val topEnchants = inventory.getItem(0)?.fast()?.getEnchants(true) ?: emptyMap()
+             val bottomEnchants = inventory.getItem(1)?.fast()?.getEnchants(true) ?: emptyMap()
+ 
+@@ -95,15 +92,19 @@ class GrindstoneSupport(
+         }
+ 
+         // Force remove XP
+-        plugin.scheduler.runLater(1) {
+-            val loc = inventory.location
+-
+-            val orbs = loc?.getNearbyEntities(3.0, 3.0, 3.0)
+-                ?: emptyList()
+-
+-            for (orb in orbs.filterIsInstance<ExperienceOrb>()) {
+-                orb.remove()
+-            }
+-        }
++        event.player.scheduler.runDelayed(
++            plugin,
++            {
++                val loc = inventory.location ?: return@runDelayed
++                val orbs = loc.getNearbyEntities(3.0, 3.0, 3.0)
++                    .filterIsInstance<ExperienceOrb>()
++                    .filter { it.spawnReason == ExperienceOrb.SpawnReason.GRINDSTONE }
++                for (orb in orbs) {
++                    orb.remove()
++                }
++            },
++            {},
++            1
++        )
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/LootSupport.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/LootSupport.kt
+index 9faf0e7d..07c56283 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/LootSupport.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/LootSupport.kt
+@@ -2,10 +2,8 @@ package com.willfp.ecoenchants.mechanics
+ 
+ import com.willfp.eco.core.fast.fast
+ import com.willfp.eco.util.NumberUtils
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+-import com.willfp.ecoenchants.enchant.EcoEnchant
+ import com.willfp.ecoenchants.enchant.EcoEnchants
+-import com.willfp.ecoenchants.enchant.conflictsWithDeep
++import com.willfp.ecoenchants.plugin
+ import com.willfp.ecoenchants.target.EnchantmentTargets.isEnchantable
+ import org.bukkit.Material
+ import org.bukkit.event.EventHandler
+@@ -15,12 +13,10 @@ import org.bukkit.inventory.ItemStack
+ import org.bukkit.inventory.meta.EnchantmentStorageMeta
+ import kotlin.math.ceil
+ 
+-class LootSupport(
+-    private val plugin: EcoEnchantsPlugin
+-) : Listener {
++object LootSupport : Listener {
+     @EventHandler
+     fun onGenerate(event: LootGenerateEvent) {
+-        if (!this.plugin.configYml.getBool("loot.enabled")) {
++        if (!plugin.configYml.getBool("loot.enabled")) {
+             return
+         }
+ 
+@@ -49,7 +45,7 @@ class LootSupport(
+                 continue
+             }
+ 
+-            if (!enchantment.canEnchantItem(item)) {
++            if (!enchantment.canEnchantItem(item, enchants.keys)) {
+                 continue
+             }
+ 
+@@ -57,20 +53,10 @@ class LootSupport(
+                 continue
+             }
+ 
+-            if (enchants.any { (it, _) -> enchantment.enchantment.conflictsWithDeep(it) }) {
+-                continue
+-            }
+-
+             if (enchants.size > plugin.configYml.getInt("anvil.enchant-limit").infiniteIfNegative()) {
+                 break
+             }
+ 
+-            if (
+-                enchants.keys.filterIsInstance<EcoEnchant>()
+-                    .count { it.type == enchantment.type } >= enchantment.type.limit
+-            ) {
+-                continue
+-            }
+ 
+             val maxLevel = enchantment.maximumLevel
+ 
+@@ -78,7 +64,7 @@ class LootSupport(
+             val levelPart2 = NumberUtils.triangularDistribution(0.0, 1.0, levelPart1)
+             val level = ceil(levelPart2 * maxLevel).coerceIn(1.0..maxLevel.toDouble()).toInt()
+ 
+-            multiplier /= this.plugin.configYml.getDouble("villager.reduction")
++            multiplier /= plugin.configYml.getDouble("loot.reduction")
+ 
+             enchants[enchantment.enchantment] = level
+         }
+@@ -91,4 +77,4 @@ class LootSupport(
+         }
+         item.itemMeta = meta
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/VillagerSupport.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/VillagerSupport.kt
+index d106f5d8..d706ae9c 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/VillagerSupport.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/mechanics/VillagerSupport.kt
+@@ -2,10 +2,8 @@ package com.willfp.ecoenchants.mechanics
+ 
+ import com.willfp.eco.core.fast.fast
+ import com.willfp.eco.util.NumberUtils
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+-import com.willfp.ecoenchants.enchant.EcoEnchant
+ import com.willfp.ecoenchants.enchant.EcoEnchants
+-import com.willfp.ecoenchants.enchant.conflictsWithDeep
++import com.willfp.ecoenchants.plugin
+ import com.willfp.ecoenchants.target.EnchantmentTargets.isEnchantable
+ import org.bukkit.Material
+ import org.bukkit.event.EventHandler
+@@ -15,13 +13,10 @@ import org.bukkit.inventory.MerchantRecipe
+ import org.bukkit.inventory.meta.EnchantmentStorageMeta
+ import kotlin.math.ceil
+ 
+-
+-class VillagerSupport(
+-    private val plugin: EcoEnchantsPlugin
+-) : Listener {
++object VillagerSupport : Listener {
+     @EventHandler
+     fun onTrade(event: VillagerAcquireTradeEvent) {
+-        if (!this.plugin.configYml.getBool("villager.enabled")) {
++        if (!plugin.configYml.getBool("villager.enabled")) {
+             return
+         }
+ 
+@@ -50,7 +45,7 @@ class VillagerSupport(
+                 continue
+             }
+ 
+-            if (!enchantment.canEnchantItem(result)) {
++            if (!enchantment.canEnchantItem(result, enchants.keys)) {
+                 continue
+             }
+ 
+@@ -58,20 +53,10 @@ class VillagerSupport(
+                 continue
+             }
+ 
+-            if (enchants.any { (it, _) -> enchantment.enchantment.conflictsWithDeep(it) }) {
+-                continue
+-            }
+-
+             if (enchants.size > plugin.configYml.getInt("anvil.enchant-limit").infiniteIfNegative()) {
+                 break
+             }
+ 
+-            if (
+-                enchants.keys.filterIsInstance<EcoEnchant>()
+-                    .count { it.type == enchantment.type } >= enchantment.type.limit
+-            ) {
+-                continue
+-            }
+ 
+             val maxLevel = enchantment.maximumLevel
+ 
+@@ -80,7 +65,7 @@ class VillagerSupport(
+             val levelPart3 = NumberUtils.bias(levelPart2, enchantment.type.highLevelBias)
+             val level = ceil(levelPart3 * maxLevel).coerceIn(1.0..maxLevel.toDouble()).toInt()
+ 
+-            multiplier /= this.plugin.configYml.getDouble("villager.reduction")
++            multiplier /= plugin.configYml.getDouble("villager.reduction")
+ 
+             if (result.type == Material.ENCHANTED_BOOK) {
+                 // Only allow one enchantment
+@@ -122,4 +107,4 @@ class VillagerSupport(
+         recipe.ingredients = event.recipe.ingredients
+         event.recipe = recipe
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/rarity/EnchantmentRarities.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/rarity/EnchantmentRarities.kt
+index 6aff647c..3881ac77 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/rarity/EnchantmentRarities.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/rarity/EnchantmentRarities.kt
+@@ -1,19 +1,19 @@
+ package com.willfp.ecoenchants.rarity
+ 
+ import com.willfp.eco.core.registry.Registry
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+ import com.willfp.ecoenchants.display.RaritySorter
++import com.willfp.ecoenchants.plugin
+ 
+ @Suppress("UNUSED")
+ object EnchantmentRarities : Registry<EnchantmentRarity>() {
+     @JvmStatic
+-    fun update(plugin: EcoEnchantsPlugin) {
++    fun update() {
+         clear()
+ 
+         for (config in plugin.rarityYml.getSubsections("rarities")) {
+             register(EnchantmentRarity(config))
+         }
+ 
+-        RaritySorter.update(plugin)
++        RaritySorter.update()
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/rarity/EnchantmentRarity.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/rarity/EnchantmentRarity.kt
+index 694266b9..7fb4630f 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/rarity/EnchantmentRarity.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/rarity/EnchantmentRarity.kt
+@@ -36,6 +36,6 @@ class EnchantmentRarity(
+     }
+ 
+     override fun toString(): String {
+-        return "EnchantmentType{$id}"
++        return "EnchantmentRarity{$id}"
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/target/EnchantFinder.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/target/EnchantFinder.kt
+index 7e0ae131..be934423 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/target/EnchantFinder.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/target/EnchantFinder.kt
+@@ -68,4 +68,4 @@ object EnchantFinder : ItemHolderFinder<EcoEnchantLevel>() {
+         val item: ItemStack,
+         val holder: ProvidedHolder
+     )
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/target/EnchantmentTarget.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/target/EnchantmentTarget.kt
+index 5d89d161..7d7cd0ce 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/target/EnchantmentTarget.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/target/EnchantmentTarget.kt
+@@ -77,4 +77,4 @@ internal object AllEnchantmentTarget : EnchantmentTarget {
+     override fun equals(other: Any?): Boolean {
+         return other is AllEnchantmentTarget
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/target/EnchantmentTargets.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/target/EnchantmentTargets.kt
+index c99f2756..9adf0dbc 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/target/EnchantmentTargets.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/target/EnchantmentTargets.kt
+@@ -3,7 +3,6 @@ package com.willfp.ecoenchants.target
+ import com.github.benmanes.caffeine.cache.Caffeine
+ import com.willfp.eco.core.items.HashedItem
+ import com.willfp.eco.core.registry.Registry
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+ import com.willfp.ecoenchants.enchant.EcoEnchant
+ import com.willfp.ecoenchants.enchant.EcoEnchants
+ import com.willfp.ecoenchants.plugin
+@@ -14,7 +13,7 @@ import java.util.concurrent.TimeUnit
+ object EnchantmentTargets : Registry<EnchantmentTarget>() {
+     init {
+         register(AllEnchantmentTarget)
+-        update(plugin)
++        update()
+     }
+ 
+     private fun getForItem(item: ItemStack): List<EnchantmentTarget> {
+@@ -34,7 +33,7 @@ object EnchantmentTargets : Registry<EnchantmentTarget>() {
+         }
+ 
+     @JvmStatic
+-    fun update(plugin: EcoEnchantsPlugin) {
++    fun update() {
+         for (target in values()) {
+             if (target is AllEnchantmentTarget) {
+                 continue
+@@ -56,4 +55,4 @@ private val enchantableCache = Caffeine.newBuilder()
+ 
+ private val canEnchantCache = Caffeine.newBuilder()
+     .expireAfterAccess(5, TimeUnit.SECONDS)
+-    .build<HashedItem, List<EcoEnchant>>()
++    .build<HashedItem, List<EcoEnchant>>()
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/type/EnchantmentType.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/type/EnchantmentType.kt
+index cd04fd05..bad3ccdd 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/type/EnchantmentType.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/type/EnchantmentType.kt
+@@ -1,6 +1,5 @@
+ package com.willfp.ecoenchants.type
+ 
+-import com.willfp.eco.core.EcoPlugin
+ import com.willfp.eco.core.config.interfaces.Config
+ import com.willfp.eco.core.registry.Registrable
+ import com.willfp.ecoenchants.libreforge.TriggerEnchantType
+@@ -9,9 +8,8 @@ import com.willfp.libreforge.triggers.Triggers
+ import java.util.Objects
+ 
+ class EnchantmentType(
+-    private val plugin: EcoPlugin,
+     internal val config: Config
+-): Registrable {
++) : Registrable {
+     val id = config.getString("id")
+     val format = config.getString("format")
+     val limit = config.getInt("limit").infiniteIfNegative()
+@@ -31,7 +29,7 @@ class EnchantmentType(
+     }
+ 
+     override fun onRegister() {
+-        Triggers.register(TriggerEnchantType(plugin, this))
++        Triggers.register(TriggerEnchantType(this))
+     }
+ 
+     override fun getID(): String {
+@@ -45,4 +43,4 @@ class EnchantmentType(
+     override fun toString(): String {
+         return "EnchantmentType{$id}"
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/type/EnchantmentTypes.kt b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/type/EnchantmentTypes.kt
+index 52482fd2..81a3e218 100644
+--- a/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/type/EnchantmentTypes.kt
++++ b/eco-core/core-plugin/src/main/kotlin/com/willfp/ecoenchants/type/EnchantmentTypes.kt
+@@ -1,25 +1,25 @@
+ package com.willfp.ecoenchants.type
+ 
+ import com.willfp.eco.core.registry.Registry
+-import com.willfp.ecoenchants.EcoEnchantsPlugin
+ import com.willfp.ecoenchants.display.TypeSorter
++import com.willfp.ecoenchants.plugin
+ 
+ @Suppress("UNUSED")
+-object EnchantmentTypes: Registry<EnchantmentType>() {
++object EnchantmentTypes : Registry<EnchantmentType>() {
+     /**
+      * Update all [EnchantmentType]s.
+      *
+      * @param plugin Instance of EcoEnchants.
+      */
+-    fun update(plugin: EcoEnchantsPlugin) {
++    fun update() {
+         for (type in values()) {
+             clear()
+         }
+ 
+         for (config in plugin.typesYml.getSubsections("types")) {
+-            register(EnchantmentType(plugin, config))
++            register(EnchantmentType(config))
+         }
+ 
+-        TypeSorter.update(plugin)
++        TypeSorter.update()
+     }
+-}
++}
+\ No newline at end of file
+diff --git a/settings.gradle.kts b/settings.gradle.kts
+index a18d5a50..3b49791e 100644
+--- a/settings.gradle.kts
++++ b/settings.gradle.kts
+@@ -3,12 +3,24 @@ pluginManagement {
+         maven("https://repo.papermc.io/repository/maven-public/")
+         gradlePluginPortal()
+         mavenLocal()
+-        maven("https://repo.auxilor.io/repository/maven-public/")
++
++        // Folia libreforge-gradle-plugin (com.willfp.libreforge-gradle-plugin:*-folia).
++        maven("https://maven.pkg.github.com/MrNickax/libreforge-folia") {
++            credentials {
++                username = providers.environmentVariable("GITHUB_ACTOR").orNull
++                    ?: providers.gradleProperty("gpr.user").orNull
++                password = providers.environmentVariable("GITHUB_TOKEN").orNull
++                    ?: providers.gradleProperty("gpr.key").orNull
++            }
++            // Covers both the plugin artifact (com.willfp:libreforge-gradle-plugin) and its
++            // marker (com.willfp.libreforge-gradle-plugin:*.gradle.plugin).
++            content { includeGroupByRegex("com\\.willfp.*") }
++        }
+     }
+ }
+ 
+ plugins {
+-    id("org.gradle.toolchains.foojay-resolver-convention") version "0.8.0"
++    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+ }
+ 
+ rootProject.name = "EcoEnchants"
+@@ -17,9 +29,8 @@ rootProject.name = "EcoEnchants"
+ include(":eco-core")
+ include(":eco-core:core-plugin")
+ include(":eco-core:core-nms")
+-include(":eco-core:core-nms:v1_21_4")
+-include(":eco-core:core-nms:v1_21_5")
+-include(":eco-core:core-nms:v1_21_6")
+-include(":eco-core:core-nms:v1_21_7")
+ include(":eco-core:core-nms:v1_21_8")
+ include(":eco-core:core-nms:v1_21_10")
++include(":eco-core:core-nms:v1_21_11")
++include(":eco-core:core-nms:v26_1_1")
++include(":eco-core:core-nms:v26_1_2")
+\ No newline at end of file
