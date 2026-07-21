@@ -1,13 +1,12 @@
 package com.willfp.ecoenchants.enchant
 
-import com.github.benmanes.caffeine.cache.Caffeine
-import com.willfp.eco.core.config.base.LangYml
+import com.willfp.eco.core.cache.EcoCache
 import com.willfp.eco.core.drops.DropQueue
 import com.willfp.eco.core.fast.fast
 import com.willfp.eco.core.gui.GUIComponent
+import com.willfp.eco.core.gui.addPageChanger
 import com.willfp.eco.core.gui.menu
 import com.willfp.eco.core.gui.menu.Menu
-import com.willfp.eco.core.gui.menu.MenuLayer
 import com.willfp.eco.core.gui.page.Page
 import com.willfp.eco.core.gui.page.PageChanger
 import com.willfp.eco.core.gui.slot
@@ -19,12 +18,14 @@ import com.willfp.eco.core.items.Items
 import com.willfp.eco.core.items.builder.EnchantedBookBuilder
 import com.willfp.eco.core.items.builder.ItemStackBuilder
 import com.willfp.eco.core.items.isEcoEmpty
+import com.willfp.eco.core.sound.PlayableSound
 import com.willfp.eco.util.formatEco
 import com.willfp.eco.util.lineWrap
 import com.willfp.ecoenchants.display.EnchantSorter.sortForDisplay
 import com.willfp.ecoenchants.display.HideStoredEnchantsProxy
 import com.willfp.ecoenchants.display.getFormattedDescription
 import com.willfp.ecoenchants.display.getFormattedName
+import com.willfp.ecoenchants.enchant.DiscoveryType
 import com.willfp.ecoenchants.plugin
 import com.willfp.ecoenchants.target.EnchantmentTargets.applicableEnchantments
 import org.bukkit.Material
@@ -40,7 +41,7 @@ import kotlin.math.ceil
 object EnchantGUI {
     private lateinit var menu: Menu
     private var groupMenu: Menu? = null
-    private val enchantInfoMenus = Caffeine.newBuilder().build<Pair<EcoEnchant, Int>, Menu>()
+    private val enchantInfoMenus = EcoCache.builder<Pair<EcoEnchant, Int>, Menu>().build()
     private var allEnchantsSorted: List<Enchantment> = emptyList()
 
     internal fun reload() {
@@ -85,10 +86,11 @@ object EnchantGUI {
                 val atCaptive = menu.getCaptiveItem(player, captiveRow, captiveColumn)
                 val hasItem = !atCaptive.isEcoEmpty && atCaptive != null && atCaptive.type != Material.BOOK
 
+                val canSeeHidden = player.hasPermission("ecoenchants.seehidden")
                 val baseEnchants = if (!hasItem) {
-                    EcoEnchants.values().map { it.enchantment }.sortForDisplay()
+                    EcoEnchants.values().filter { !it.isHiddenFromGui || canSeeHidden }.map { it.enchantment }.sortForDisplay()
                 } else {
-                    atCaptive.applicableEnchantments.map { it.enchantment }.sortForDisplay()
+                    atCaptive.applicableEnchantments.filter { !it.isHiddenFromGui || canSeeHidden }.map { it.enchantment }.sortForDisplay()
                         .subtract(atCaptive.fast().enchants.keys)
                         .toList()
                 }
@@ -141,17 +143,61 @@ object EnchantGUI {
                 pane
             )
 
+            val pageChangeSound = PlayableSound.create(
+                plugin.configYml.getSubsection("enchant-gui.page-change.sound")
+            )
+
             for (direction in PageChanger.Direction.entries) {
                 val directionName = direction.name.lowercase()
 
-                addComponent(
-                    MenuLayer.TOP,
-                    plugin.configYml.getInt("enchant-gui.page-change.$directionName.row"),
-                    plugin.configYml.getInt("enchant-gui.page-change.$directionName.column"),
-                    PageChanger(
-                        Items.lookup(plugin.configYml.getString("enchant-gui.page-change.$directionName.item")).item,
-                        direction
-                    )
+                addPageChanger(
+                    plugin.configYml,
+                    "enchant-gui.page-change.$directionName",
+                    direction,
+                    pageChangeSound
+                )
+            }
+
+            if (plugin.configYml.getBool("enchant-gui.close-button.enabled")) {
+                setSlot(
+                    plugin.configYml.getInt("enchant-gui.close-button.row"),
+                    plugin.configYml.getInt("enchant-gui.close-button.column"),
+                    slot(
+                        ItemStackBuilder(Items.lookup(plugin.configYml.getString("enchant-gui.close-button.item")))
+                            .setDisplayName(plugin.configYml.getFormattedString("enchant-gui.close-button.name"))
+                            .addLoreLines(plugin.configYml.getStrings("enchant-gui.close-button.lore"))
+                            .build()
+                    ) {
+                        onLeftClick { event, _ -> event.whoClicked.closeInventory() }
+                    }
+                )
+            }
+
+            // Back button to return to the group selection menu
+            if (plugin.configYml.getBool("enchant-gui.grouped")
+                && plugin.configYml.getBool("enchant-gui.back-button.enabled")) {
+                setSlot(
+                    plugin.configYml.getInt("enchant-gui.back-button.row"),
+                    plugin.configYml.getInt("enchant-gui.back-button.column"),
+                    slot(
+                        ItemStackBuilder(Items.lookup(plugin.configYml.getString("enchant-gui.back-button.item")))
+                            .addLoreLines(plugin.configYml.getStrings("enchant-gui.back-button.lore"))
+                            .build()
+                    ) {
+                        onLeftClick { event, _ ->
+                            val groupGui = groupMenu ?: return@onLeftClick
+                            val player = event.whoClicked as Player
+                            // Return captive items to the player before navigating back
+                            val captiveItems = menu.getCaptiveItems(player)
+                            if (captiveItems.isNotEmpty()) {
+                                DropQueue(player)
+                                    .addItems(captiveItems)
+                                    .forceTelekinesis()
+                                    .push()
+                            }
+                            groupGui.open(player)
+                        }
+                    }
                 )
             }
 
@@ -362,8 +408,8 @@ private class EnchantmentScrollPane : GUIComponent {
     val size = rows * columns
 }
 
-private val cachedEnchantmentSlots = Caffeine.newBuilder()
-    .build<Pair<EcoEnchant, Int>, Slot>()
+private val cachedEnchantmentSlots = EcoCache.builder<Pair<EcoEnchant, Int>, Slot>()
+    .build()
 
 private fun EcoEnchant.getInformationSlot(player: Player, level: Int): Slot {
     return cachedEnchantmentSlots.get(this to level) {
@@ -398,15 +444,13 @@ private fun EcoEnchant.getInformationSlot(player: Player, level: Int): Slot {
                                         required.wrap().getFormattedName(0)
                                     }.ifEmpty { plugin.langYml.getFormattedString("no-required") }
                                 )
-                                .replace("%tradeable%", this.isObtainableThroughTrading.parseYesOrNo(plugin.langYml))
-                                .replace(
-                                    "%discoverable%",
-                                    this.isObtainableThroughDiscovery.parseYesOrNo(plugin.langYml)
-                                )
-                                .replace(
-                                    "%enchantable%",
-                                    this.isObtainableThroughEnchanting.parseYesOrNo(plugin.langYml)
-                                )
+                                .replace("%tradeable%", this.isObtainableThroughTrading.parseYesOrNo())
+                                .replace("%discoverable%", this.isObtainableThroughDiscovery.parseYesOrNo())
+                                .replace("%discoverable_chests%", this.isObtainableThrough(DiscoveryType.CHESTS).parseYesOrNo())
+                                .replace("%discoverable_fishing%", this.isObtainableThrough(DiscoveryType.FISHING).parseYesOrNo())
+                                .replace("%discoverable_mob_drops%", this.isObtainableThrough(DiscoveryType.MOB_DROPS).parseYesOrNo())
+                                .replace("%discoverable_raids%", this.isObtainableThrough(DiscoveryType.RAIDS).parseYesOrNo())
+                                .replace("%enchantable%", this.isObtainableThroughEnchanting.parseYesOrNo())
                         }
                         .formatEco()
                         .flatMap {
@@ -423,6 +467,5 @@ private fun EcoEnchant.getInformationSlot(player: Player, level: Int): Slot {
     }
 }
 
-fun Boolean.parseYesOrNo(langYml: LangYml): String {
-    return if (this) langYml.getFormattedString("yes") else langYml.getFormattedString("no")
-}
+fun Boolean.parseYesOrNo(): String =
+    if (this) plugin.langYml.getFormattedString("yes") else plugin.langYml.getFormattedString("no")

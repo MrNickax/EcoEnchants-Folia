@@ -96,6 +96,7 @@ object EnchantmentReplenish : HardcodedEcoEnchant(
                 block.blockData = data
 
                 // Improves compatibility with other plugins.
+                @Suppress("UnstableApiUsage")
                 Bukkit.getPluginManager().callEvent(
                     BlockPlaceEvent(
                         block,
