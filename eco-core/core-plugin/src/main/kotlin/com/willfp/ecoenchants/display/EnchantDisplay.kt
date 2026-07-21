@@ -114,7 +114,7 @@ object EnchantDisplay : DisplayModule(plugin, DisplayPriority.HIGH) {
                 if (shouldDescribe) {
                     enchantLore.addAll(
                         enchant.getFormattedDescription(level, player)
-                            .filter { it.isNotEmpty() }.map { Display.PREFIX + it })
+                        .filter { it.isNotEmpty() }.map { Display.PREFIX + it })
                 }
             }
         }

@@ -7,8 +7,13 @@ version = rootProject.version
 
 dependencies {
     implementation(project(":eco-core:core-nms:v1_21_8", configuration = "shadow"))
-    compileOnly("net.kyori:adventure-text-serializer-ansi:4.18.0")
     paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
+}
+
+// Workaround: Paper 1.21.11 dev-bundle POM declares adventure-text-serializer-ansi
+// without a version, causing Gradle resolution to fail. Force a known compatible version.
+configurations.all {
+    resolutionStrategy.force("net.kyori:adventure-text-serializer-ansi:4.23.0")
 }
 
 tasks {
