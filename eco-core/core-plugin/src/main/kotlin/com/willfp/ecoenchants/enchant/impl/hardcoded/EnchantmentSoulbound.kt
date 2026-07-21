@@ -114,12 +114,14 @@ object EnchantmentSoulbound : HardcodedEcoEnchant(
 
             val items = itemStrings.map { Items.fromSNBT(it) }
 
-            plugin.scheduler.run {
+            // Folia: DropQueue delivers to the player's inventory/location, so run on the
+            // player's own region scheduler.
+            player.scheduler.run(plugin, {
                 DropQueue(player)
                     .addItems(items)
                     .forceTelekinesis()
                     .push()
-            }
+            }, null)
 
             player.profile.write(savedSoulboundItems, emptyList())
         }
