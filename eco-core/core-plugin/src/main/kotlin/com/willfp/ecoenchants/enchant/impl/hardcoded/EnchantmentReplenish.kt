@@ -80,18 +80,27 @@ object EnchantmentReplenish : HardcodedEcoEnchant(
                 }
             }
 
+            // Replenish only replants fully-grown crops. Breaking an immature crop is a plain,
+            // normal break (drops and all): the upstream behaviour of cancelling drops and
+            // resetting the crop to age 0 effectively made unripe crops unbreakable, which is
+            // not wanted here.
             if (data.age != data.maximumAge) {
-                if (enchant.config.getBool("only-fully-grown")) {
-                    return
-                }
-
-                event.isDropItems = false
-                event.expToDrop = 0
+                return
             }
 
             data.age = 0
 
-            plugin.scheduler.run {
+            // The break lands after this event returns, so the replant must run on the next
+            // tick — and on Folia/Canvas it must run on the region that owns the block. The
+            // previous plugin.scheduler.run goes through the GLOBAL region scheduler, and any
+            // block write from there fails the tick-thread check ("Cannot read world
+            // asynchronously"), so the replant never happened at all.
+            //
+            // The player can hop regions within that tick, so their main-hand item is captured
+            // here, on the event's (correct) thread, instead of being read inside the task.
+            val handItem = player.inventory.itemInMainHand
+
+            Bukkit.getRegionScheduler().run(plugin, block.location) { _ ->
                 block.type = type
                 block.blockData = data
 
@@ -102,7 +111,7 @@ object EnchantmentReplenish : HardcodedEcoEnchant(
                         block,
                         block.state,
                         block.getRelative(BlockFace.DOWN),
-                        player.inventory.itemInMainHand,
+                        handItem,
                         player,
                         true,
                         EquipmentSlot.HAND
