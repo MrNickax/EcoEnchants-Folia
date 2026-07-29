@@ -213,13 +213,13 @@ object BedrockBookApplySupport : Listener {
             append("§7¿Aplicar los siguientes encantamientos a tu objeto?\n\n")
             for ((enchant, level) in applicable) {
                 val name = colorCodes.replace(enchant.wrap().rawDisplayName, "").trim()
-                append("§f• $name §7(nivel $level)\n")
+                append("§e$name §7Nivel: §e$level\n")
             }
             append("\n§8Se consumirá el libro.")
         }
 
         val form = ModalForm.builder()
-            .title("§5Aplicar Encantamiento")
+            .title("§eAplicar encantamiento")
             .content(content)
             .button1("§aConfirmar")
             .button2("§cCancelar")
