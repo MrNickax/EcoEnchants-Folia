@@ -19,7 +19,7 @@ commands:
     description: Base Command
     permission: ecoenchants.command.ecoenchants
   enchantinfo:
-    description: Show info about an enchant
+    description: Open the enchant GUI, or show info about a specific enchant
     permission: ecoenchants.command.enchantinfo
   enchant:
     description: Enchants an item

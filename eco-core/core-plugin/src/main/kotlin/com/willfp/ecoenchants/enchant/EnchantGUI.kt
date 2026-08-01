@@ -19,6 +19,7 @@ import com.willfp.eco.core.items.builder.EnchantedBookBuilder
 import com.willfp.eco.core.items.builder.ItemStackBuilder
 import com.willfp.eco.core.items.isEcoEmpty
 import com.willfp.eco.core.sound.PlayableSound
+import com.willfp.eco.util.StringUtils
 import com.willfp.eco.util.formatEco
 import com.willfp.eco.util.lineWrap
 import com.willfp.ecoenchants.display.EnchantSorter.sortForDisplay
@@ -28,6 +29,7 @@ import com.willfp.ecoenchants.display.getFormattedName
 import com.willfp.ecoenchants.enchant.DiscoveryType
 import com.willfp.ecoenchants.plugin
 import com.willfp.ecoenchants.target.EnchantmentTargets.applicableEnchantments
+import org.bukkit.ChatColor
 import org.bukkit.Material
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.entity.Player
@@ -351,7 +353,11 @@ object EnchantGUI {
 
         enchantInfoMenus.get(enchant to effectiveLevel) {
             menu(plugin.configYml.getInt("enchantinfo.rows")) {
-                title = enchant.getFormattedName(effectiveLevel)
+                // The book inside the GUI keeps the enchantment's colours; the window title is
+                // always plain dark grey so it blends with the rest of the menu chrome.
+                title = StringUtils.format(
+                    "&8" + (ChatColor.stripColor(enchant.getFormattedName(effectiveLevel)) ?: "")
+                )
 
                 setSlot(
                     plugin.configYml.getInt("enchantinfo.item.row"),

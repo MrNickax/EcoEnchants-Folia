@@ -19,7 +19,7 @@ object CommandEnchantInfo : PluginCommand(
         sender as Player
 
         if (args.isEmpty()) {
-            sender.sendMessage(this.plugin.langYml.getMessage("missing-enchant"))
+            EnchantGUI.openGUI(sender)
             return
         }
 
