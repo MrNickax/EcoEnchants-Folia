@@ -90,6 +90,11 @@ display:
 # Options for the /enchantinfo GUI
 enchantinfo:
   rows: 3 # How many rows for the GUI
+
+  # The enchantment name is stripped of its own colours and re-coloured with this format
+  # for the window title. The book inside the GUI keeps the enchantment's own formatting.
+  title-format: "&8"
+
   mask: # The background material
     items:
       - black_stained_glass_pane

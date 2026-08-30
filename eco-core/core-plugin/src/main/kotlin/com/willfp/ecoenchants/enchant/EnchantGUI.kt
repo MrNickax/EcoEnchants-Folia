@@ -251,8 +251,10 @@ object EnchantGUI {
                 val total = enchants.size
                 val perPage = pane.size
 
+                // Never report zero: an empty list is still one (empty) page, otherwise
+                // %max_page% renders as "1/0" in the title.
                 val pages = if (total == 0) {
-                    0
+                    1
                 } else {
                     ceil(total.toDouble() / perPage).toInt()
                 }
@@ -354,9 +356,12 @@ object EnchantGUI {
         enchantInfoMenus.get(enchant to effectiveLevel) {
             menu(plugin.configYml.getInt("enchantinfo.rows")) {
                 // The book inside the GUI keeps the enchantment's colours; the window title is
-                // always plain dark grey so it blends with the rest of the menu chrome.
+                // stripped and re-coloured with a single format so it matches the other menus.
+                val titleFormat = plugin.configYml.getString("enchantinfo.title-format")
+                    .ifEmpty { "&8" }
+
                 title = StringUtils.format(
-                    "&8" + (ChatColor.stripColor(enchant.getFormattedName(effectiveLevel)) ?: "")
+                    titleFormat + (ChatColor.stripColor(enchant.getFormattedName(effectiveLevel)) ?: "")
                 )
 
                 setSlot(
