@@ -301,6 +301,13 @@ object AnvilSupport : Listener {
                 return@run
             }
 
+            // Rewriting a slot re-runs vanilla's result computation, which fires a fresh
+            // PrepareAnvilEvent whose generation takes over from this one. `or` on purpose:
+            // both slots get rewritten in the same pass.
+            if (storeLegacyEnchants(event.inventory, 0) or storeLegacyEnchants(event.inventory, 1)) {
+                return@run
+            }
+
             val left = event.inventory.getItem(0)?.clone()
             val old = left?.clone()
             val right = event.inventory.getItem(1)?.clone()
@@ -382,6 +389,47 @@ object AnvilSupport : Listener {
             event.inventory.setItem(2, outItem)
             renderedPreviewGeneration[player.uniqueId] = generation
         }
+    }
+
+    /**
+     * Moves the enchantments of a book that carries them in the active `enchantments` component
+     * into `stored_enchantments`, where vanilla expects them on a book.
+     *
+     * Such books come from `ItemMeta#addEnchant` being used on an enchanted book instead of
+     * `EnchantmentStorageMeta#addStoredEnchant`. Vanilla only reads the stored component off a
+     * book, so `AnvilMenu.createResult` sees an empty sacrifice: with a name typed it prices the
+     * merge as a plain rename, flags it as rename-only, and `onTake` then leaves the book in its
+     * slot. [doMerge] reads both components and still applies the enchantments, which hands the
+     * player the enchantment for free and the book back. Rewriting the book first makes vanilla
+     * price and consume it like any other.
+     *
+     * @return whether the slot was rewritten; if so vanilla has already recomputed its result and
+     * fired a fresh [PrepareAnvilEvent] for it.
+     */
+    private fun storeLegacyEnchants(inventory: AnvilInventory, slot: Int): Boolean {
+        val book = inventory.getItem(slot) ?: return false
+
+        if (book.type != Material.ENCHANTED_BOOK) {
+            return false
+        }
+
+        val active = book.enchantments
+
+        if (active.isEmpty()) {
+            return false
+        }
+
+        val meta = book.itemMeta as? EnchantmentStorageMeta ?: return false
+
+        for ((enchant, level) in active) {
+            meta.addStoredEnchant(enchant, max(level, meta.getStoredEnchantLevel(enchant)), true)
+            meta.removeEnchant(enchant)
+        }
+
+        book.itemMeta = meta
+        inventory.setItem(slot, book)
+
+        return true
     }
 
     private fun doMerge(
