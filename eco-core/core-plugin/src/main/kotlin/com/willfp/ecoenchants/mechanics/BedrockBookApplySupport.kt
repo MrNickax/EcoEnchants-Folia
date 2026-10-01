@@ -2,6 +2,7 @@ package com.willfp.ecoenchants.mechanics
 
 import com.willfp.eco.core.drops.DropQueue
 import com.willfp.eco.core.fast.fast
+import com.willfp.ecoenchants.enchant.ActiveEnchants
 import com.willfp.ecoenchants.enchant.EcoEnchants
 import com.willfp.ecoenchants.enchant.wrap
 import com.willfp.ecoenchants.plugin
@@ -178,10 +179,16 @@ object BedrockBookApplySupport : Listener {
                 give(player, p.target, p.book)
                 return@run
             }
+
+            // Same as the Java anvil: what the item already had active stays active.
+            val activeBefore = ActiveEnchants.snapshot(p.target)
+
             for ((enchant, level) in valid) {
                 meta.addEnchant(enchant, level, true)
             }
             p.target.itemMeta = meta
+
+            ActiveEnchants.pin(p.target, activeBefore)
 
             // One book was consumed; hand back the enchanted item.
             give(player, p.target)

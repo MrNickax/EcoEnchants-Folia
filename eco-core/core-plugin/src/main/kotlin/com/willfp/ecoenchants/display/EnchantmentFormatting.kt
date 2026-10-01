@@ -6,6 +6,7 @@ import com.willfp.eco.util.NumberUtils
 import com.willfp.eco.util.StringUtils
 import com.willfp.eco.util.formatEco
 import com.willfp.ecoenchants.enchant.EcoEnchantLike
+import com.willfp.ecoenchants.enchant.SelectionState
 import org.bukkit.entity.Player
 
 // This is an object to be able to invalidate the cache on reload
@@ -25,19 +26,26 @@ object DisplayCache {
 data class DisplayableEnchant(
     val enchant: EcoEnchantLike,
     val level: Int,
-    val showNotMet: Boolean = false
+    val showNotMet: Boolean = false,
+    // Part of the cache key: the same enchant renders differently when active and inactive.
+    val selection: SelectionState = SelectionState.NONE
 )
 
 @JvmOverloads
 fun EcoEnchantLike.getFormattedName(
     level: Int,
-    showNotMet: Boolean = false
+    showNotMet: Boolean = false,
+    selection: SelectionState = SelectionState.NONE
 ): String {
-    return DisplayCache.nameCache.get(DisplayableEnchant(this, level, showNotMet)) {
+    return DisplayCache.nameCache.get(DisplayableEnchant(this, level, showNotMet, selection)) {
         val numerals = plugin.configYml.getBool("display.numerals.enabled") &&
                 level <= plugin.configYml.getInt("display.numerals.threshold")
 
-        val typeFormat = this.type.format
+        val typeFormat = when (selection) {
+            SelectionState.NONE -> this.type.format
+            SelectionState.ACTIVE -> this.type.activeFormat
+            SelectionState.INACTIVE -> this.type.inactiveFormat
+        }
         val name = this.rawDisplayName
         val number = if (numerals) NumberUtils.toNumeral(level) else level.toString()
         val dontShowNumber = (level == 1 && this.maximumLevel == 1) || level < 1

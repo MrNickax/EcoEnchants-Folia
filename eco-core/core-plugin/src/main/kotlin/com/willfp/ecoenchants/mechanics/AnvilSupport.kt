@@ -3,6 +3,7 @@ package com.willfp.ecoenchants.mechanics
 import com.willfp.eco.core.fast.fast
 import com.willfp.eco.core.proxy.ProxyConstants
 import com.willfp.eco.util.StringUtils
+import com.willfp.ecoenchants.enchant.ActiveEnchants
 import com.willfp.ecoenchants.enchant.EcoEnchants
 import com.willfp.ecoenchants.enchant.wrap
 import com.willfp.ecoenchants.plugin
@@ -492,6 +493,10 @@ object AnvilSupport : Listener {
 
         left.fast().displayName = formattedItemName.let { "§o$it" } // Same again, it works though
 
+        // Taken before the merge: the item being worked on keeps its active selection, whatever
+        // the sacrifice brings in or how the new ids sort.
+        val activeBefore = ActiveEnchants.snapshot(left)
+
         val leftEnchants = left.fast().getEnchants(true)
         val rightEnchants = right.fast().getEnchants(true)
 
@@ -545,6 +550,12 @@ object AnvilSupport : Listener {
         }
 
         left.itemMeta = leftMeta
+
+        // Only when something was added: a pin alone would make `left != old` and turn a no-op
+        // merge into one that eats the sacrifice.
+        if (outEnchants.keys != leftEnchants.keys) {
+            ActiveEnchants.pin(left, activeBefore)
+        }
 
         val enchantLevelDiff = abs(leftEnchants.values.sum() - outEnchants.values.sum())
         val xpCost =

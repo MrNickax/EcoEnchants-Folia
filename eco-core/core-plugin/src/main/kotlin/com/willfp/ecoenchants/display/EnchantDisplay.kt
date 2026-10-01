@@ -8,7 +8,9 @@ import com.willfp.eco.core.fast.FastItemStack
 import com.willfp.eco.core.fast.fast
 import com.willfp.ecoenchants.commands.CommandToggleDescriptions.seesEnchantmentDescriptions
 import com.willfp.ecoenchants.display.EnchantSorter.sortForDisplay
+import com.willfp.ecoenchants.enchant.ActiveEnchants
 import com.willfp.ecoenchants.enchant.EcoEnchant
+import com.willfp.ecoenchants.enchant.SelectionState
 import com.willfp.ecoenchants.enchant.wrap
 import com.willfp.ecoenchants.plugin
 import com.willfp.ecoenchants.target.EnchantmentTargets.isEnchantable
@@ -78,6 +80,8 @@ object EnchantDisplay : DisplayModule(plugin, DisplayPriority.HIGH) {
 
         val notMetLines = mutableListOf<String>()
 
+        val selections = ActiveEnchants.displayStates(itemStack, enchants.keys)
+
         for ((enchant, level) in enchants) {
             var showNotMet = false
             if (player != null && enchant is EcoEnchant) {
@@ -92,8 +96,10 @@ object EnchantDisplay : DisplayModule(plugin, DisplayPriority.HIGH) {
                 }
             }
 
-            formattedNames[DisplayableEnchant(enchant.wrap(), level)] =
-                enchant.wrap().getFormattedName(level, showNotMet = showNotMet)
+            val selection = selections[enchant] ?: SelectionState.NONE
+
+            formattedNames[DisplayableEnchant(enchant.wrap(), level, selection = selection)] =
+                enchant.wrap().getFormattedName(level, showNotMet = showNotMet, selection = selection)
         }
 
         if (shouldCollapse) {
@@ -111,7 +117,8 @@ object EnchantDisplay : DisplayModule(plugin, DisplayPriority.HIGH) {
 
                 enchantLore.add(Display.PREFIX + formattedName)
 
-                if (shouldDescribe) {
+                // Only the active one explains itself; the rest are listed so a buyer sees them.
+                if (shouldDescribe && displayable.selection != SelectionState.INACTIVE) {
                     enchantLore.addAll(
                         enchant.getFormattedDescription(level, player)
                         .filter { it.isNotEmpty() }.map { Display.PREFIX + it })

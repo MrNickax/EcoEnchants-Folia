@@ -2,6 +2,7 @@ package com.willfp.ecoenchants.target
 
 import com.willfp.eco.core.cache.EcoCache
 import com.willfp.eco.core.fast.fast
+import com.willfp.ecoenchants.enchant.ActiveEnchants
 import com.willfp.ecoenchants.enchant.EcoEnchant
 import com.willfp.ecoenchants.enchant.EcoEnchantLevel
 import com.willfp.libreforge.ProvidedHolder
@@ -22,8 +23,11 @@ object EnchantFinder : ItemHolderFinder<EcoEnchantLevel>() {
         val enchantMap = item.fast().enchants
         val enchants = mutableListOf<EcoEnchantLevel>()
 
+        // Carried but switched off by the owner: no effects until it is picked again.
+        val inactive = ActiveEnchants.findInactive(item, enchantMap.keys)
+
         for ((enchant, level) in enchantMap) {
-            if (enchant !is EcoEnchant) {
+            if (enchant !is EcoEnchant || enchant in inactive) {
                 continue
             }
 
