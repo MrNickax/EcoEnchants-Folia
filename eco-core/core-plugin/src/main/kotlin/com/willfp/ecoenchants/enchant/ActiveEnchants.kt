@@ -44,6 +44,10 @@ enum class SelectionState {
  * enchantments of the type in id order. An item that predates this feature, or whose pinned
  * enchantment was taken off in a grindstone, therefore still resolves without migration.
  *
+ * "The type" here is each enchantment's [EcoEnchantLike.activeGroup]: its own type, unless its
+ * config joins another type's selection with `active-group`. That lets an enchantment of a
+ * different type compete for the same single slot without conflict lists.
+ *
  * Enchanted books never have an active selection: they only carry enchantments to apply.
  */
 object ActiveEnchants {
@@ -57,13 +61,13 @@ object ActiveEnchants {
      */
     @JvmStatic
     fun isActive(item: ItemStack, enchantment: Enchantment): Boolean {
-        val type = enchantment.wrap().type
+        val type = enchantment.wrap().activeGroup
 
         if (!type.isSelectable || item.type == Material.ENCHANTED_BOOK) {
             return true
         }
 
-        val members = item.fast().enchants.keys.filter { it.wrap().type == type }
+        val members = item.fast().enchants.keys.filter { it.wrap().activeGroup == type }
 
         return enchantment in resolve(item, type, members)
     }
@@ -80,7 +84,7 @@ object ActiveEnchants {
         }
 
         return item.fast().enchants.keys
-            .filter { it.wrap().type.isSelectable }
+            .filter { it.wrap().activeGroup.isSelectable }
             .sortedBy { it.key.key }
     }
 
@@ -112,12 +116,12 @@ object ActiveEnchants {
      */
     @JvmStatic
     fun setActive(item: ItemStack, enchantment: Enchantment): List<Enchantment> {
-        val type = enchantment.wrap().type
+        val type = enchantment.wrap().activeGroup
 
         require(type.isSelectable) { "${enchantment.key} is not of a type with an active-limit" }
         require(item.type != Material.ENCHANTED_BOOK) { "books have no active enchantments" }
 
-        val members = item.fast().enchants.keys.filter { it.wrap().type == type }
+        val members = item.fast().enchants.keys.filter { it.wrap().activeGroup == type }
 
         require(enchantment in members) { "item does not carry ${enchantment.key}" }
 
@@ -312,7 +316,7 @@ object ActiveEnchants {
         var grouped: MutableMap<EnchantmentType, MutableList<Enchantment>>? = null
 
         for (enchant in enchants) {
-            val type = enchant.wrap().type
+            val type = enchant.wrap().activeGroup
 
             if (!type.isSelectable) {
                 continue

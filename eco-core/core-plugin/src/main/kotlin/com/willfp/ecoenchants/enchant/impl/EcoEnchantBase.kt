@@ -73,6 +73,10 @@ abstract class EcoEnchantBase(
         .let { EnchantmentTypes[it] }
         ?: EnchantmentTypes.values().first()
 
+    override val activeGroup: EnchantmentType = config.getStringOrNull("active-group")
+        ?.let { EnchantmentTypes[it] }
+        ?: type
+
     override val enchantmentRarity: EnchantmentRarity = config.getString("rarity")
         .let { EnchantmentRarities[it] }
         ?: EnchantmentRarities.values().first()

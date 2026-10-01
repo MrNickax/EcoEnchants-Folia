@@ -48,6 +48,16 @@ interface EcoEnchantLike {
     val type: EnchantmentType
 
     /**
+     * The type whose active selection this enchantment takes part in (see [ActiveEnchants]).
+     *
+     * Its own type unless its config joins another with `active-group`, which is how an enchantment
+     * of one type competes for the single active slot of another (a mythic trident enchantment
+     * against the limited ones) without every member listing every other in `conflicts`.
+     */
+    val activeGroup: EnchantmentType
+        get() = type
+
+    /**
      * The enchantment rarity.
      */
     val enchantmentRarity: EnchantmentRarity

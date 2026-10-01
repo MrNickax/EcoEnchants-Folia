@@ -8,7 +8,7 @@ types:
     limit: -1 # The maximum amount of enchants of this type on an item (-1 to disable)
     high-level-bias: 0 # The bias against getting high levels of enchants with this type. Between 0-1, 0 is no bias, 1 is only level 1.
     no-grindstone: false # If enchants of this type should not be removable in the grindstone
-    # active-limit: 1 # How many enchants of this type work at once on an item; the owner picks which, the rest stay on it switched off (-1 or unset: all work)
+    # active-limit: 1 # How many enchants of this type work at once on an item; the owner picks which, the rest stay on it switched off (-1 or unset: all work). Enchants of other types join with active-group in their own config
     # active-format: "&7✦ " # Format of the working ones, used only while the item carries more than active-limit (defaults to format)
     # inactive-format: "&8" # Format of the switched-off ones; they show without a description (defaults to format)
 

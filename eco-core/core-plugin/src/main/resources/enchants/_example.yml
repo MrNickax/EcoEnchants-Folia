@@ -10,6 +10,7 @@ placeholder: "%level% * 20" # The placeholder to show in the enchantment descrip
 placeholders: # Extra placeholders to show in the enchantment description (optional)
   damage: "%level% * 2" # Here, %damage% would be the extra placeholder to use
 type: normal # The enchantment type, from types.yml
+# active-group: limited # Optional: compete for the active slots of another type that has an active-limit, as if it were of that type
 
 targets: # The items that the enchantment can be applied to, see targets.yml
   - sword
