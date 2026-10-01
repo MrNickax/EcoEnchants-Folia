@@ -8,6 +8,7 @@ import org.bukkit.Material
 import org.bukkit.block.BlockFace
 import org.bukkit.block.data.Ageable
 import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockPlaceEvent
@@ -30,7 +31,11 @@ object EnchantmentReplenish : HardcodedEcoEnchant(
     private class ReplenishHandler(
         private val enchant: EcoEnchant
     ) : Listener {
+        // MONITOR so the replant is only scheduled once the break is final. At NORMAL, a later
+        // listener (region protection, BlockRegen,...) could still cancel the break, and the
+        // replant would reset the crop that was never harvested back to age 0.
         @EventHandler(
+            priority = EventPriority.MONITOR,
             ignoreCancelled = true
         )
         fun handle(event: BlockBreakEvent) {
