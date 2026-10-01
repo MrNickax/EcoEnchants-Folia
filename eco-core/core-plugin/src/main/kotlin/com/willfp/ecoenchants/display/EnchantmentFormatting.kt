@@ -43,8 +43,8 @@ fun EcoEnchantLike.getFormattedName(
 
         val typeFormat = when (selection) {
             SelectionState.NONE -> this.type.format
-            SelectionState.ACTIVE -> this.activeGroup.activeFormat
-            SelectionState.INACTIVE -> this.activeGroup.inactiveFormat
+            SelectionState.ACTIVE -> this.type.activeFormat
+            SelectionState.INACTIVE -> this.type.inactiveFormat
         }
         val name = this.rawDisplayName
         val number = if (numerals) NumberUtils.toNumeral(level) else level.toString()
