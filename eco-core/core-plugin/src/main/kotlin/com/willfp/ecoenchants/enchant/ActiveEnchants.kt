@@ -155,6 +155,27 @@ object ActiveEnchants {
     }
 
     /**
+     * Get [enchantment]'s name as written in its config, without any formatting.
+     *
+     * Paper's own [Enchantment.description] is a bare translation key for EcoEnchants
+     * enchantments, since their lore is drawn by EcoEnchants rather than the client, so a menu
+     * that shows it reads `enchantment.minecraft.<id>`.
+     */
+    @JvmStatic
+    fun displayName(enchantment: Enchantment): String {
+        return enchantment.wrap().rawDisplayName
+    }
+
+    /**
+     * Get the format of [enchantment]'s own type, as written in types.yml, to paint its name
+     * the way the lore does.
+     */
+    @JvmStatic
+    fun typeFormat(enchantment: Enchantment): String {
+        return enchantment.wrap().type.format
+    }
+
+    /**
      * Drop [entity]'s cached holders and recompute its effects now.
      *
      * libreforge caches holders for half a second and EcoEnchants' level lookup for a second;
