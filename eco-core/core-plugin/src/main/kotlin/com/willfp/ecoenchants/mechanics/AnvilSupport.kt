@@ -4,13 +4,12 @@ import com.willfp.eco.core.fast.fast
 import com.willfp.eco.core.proxy.ProxyConstants
 import com.willfp.eco.util.StringUtils
 import com.willfp.ecoenchants.enchant.ActiveEnchants
-import com.willfp.ecoenchants.enchant.EcoEnchant
 import com.willfp.ecoenchants.enchant.EcoEnchants
 import com.willfp.ecoenchants.enchant.wrap
 import com.willfp.ecoenchants.plugin
 import org.bukkit.Material
 import org.bukkit.Tag
-import org.bukkit.enchantments.Enchantment
+import org.bukkit.attribute.Attribute
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -20,6 +19,7 @@ import org.bukkit.event.inventory.InventoryCloseEvent
 import org.bukkit.event.inventory.PrepareAnvilEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.inventory.AnvilInventory
+import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.Damageable
 import org.bukkit.inventory.meta.EnchantmentStorageMeta
@@ -294,12 +294,12 @@ object AnvilSupport : Listener {
             return
         }
 
-        // Nothing on the book can go on this item, so there is nothing to merge: vanilla denies the
-        // pair and doMerge would only rename the item. Clearing the result here and rebuilding it a
-        // tick later used to wipe the result another plugin built for that pair (ItemAspects enchants
-        // a cosmetic head as a helmet), leaving the bare head or nothing at all. The generation is
-        // marked as rendered so the result click guard lets the take through.
-        if (isForeignBook(leftItem, rightItem)) {
+        // A helmet turned into a head by a cosmetic is enchanted as a helmet by ItemAspects, which
+        // builds that result itself: doMerge cannot put helmet enchantments on a head, so clearing
+        // the result here and rebuilding it a tick later wiped the enchanted head, leaving the bare
+        // head or nothing at all. The generation is marked as rendered so the result click guard
+        // lets the take through.
+        if (isHelmetHeadWithBook(leftItem, rightItem)) {
             renderedPreviewGeneration[player.uniqueId] = generation
             return
         }
@@ -405,16 +405,14 @@ object AnvilSupport : Listener {
     }
 
     /**
-     * Whether [right] is an enchanted book none of whose enchantments targets [left].
+     * Whether [left] is a helmet that a cosmetic turned into a head and [right] an enchanted book.
      *
-     * Only the targets are read. The type limits, conflicts and enchant limit that
-     * [com.willfp.ecoenchants.enchant.EcoEnchantLike.canEnchantItem] also checks are EcoEnchants'
-     * own rules, so a book they block still goes through [doMerge] instead of falling back to
-     * vanilla. An enchantment the item already holds counts only if it targets the item: vanilla
-     * refuses to merge one that does not, and so does this.
+     * A head is told apart by the armour it carries for the head slot: ItemAspects copies the
+     * helmet's armour onto the head it becomes, and no decorative or player head has any. Any other
+     * head, and any other item, stays EcoEnchants' as before.
      */
-    private fun isForeignBook(left: ItemStack?, right: ItemStack?): Boolean {
-        if (left == null || left.type == Material.AIR || left.type == Material.ENCHANTED_BOOK) {
+    private fun isHelmetHeadWithBook(left: ItemStack?, right: ItemStack?): Boolean {
+        if (left == null || left.type != Material.PLAYER_HEAD) {
             return false
         }
 
@@ -422,22 +420,10 @@ object AnvilSupport : Listener {
             return false
         }
 
-        val enchants = right.fast().getEnchants(true).keys
+        val modifiers = left.itemMeta?.getAttributeModifiers(EquipmentSlot.HEAD) ?: return false
 
-        return enchants.isNotEmpty() && enchants.none { it.isTargetOf(left) }
-    }
-
-    /**
-     * Whether [item] is among this enchantment's targets, leaving every limit aside: an EcoEnchant's
-     * configured targets, or vanilla's supported items for any other enchantment.
-     */
-    private fun Enchantment.isTargetOf(item: ItemStack): Boolean {
-        val wrapped = this.wrap()
-
-        return if (wrapped is EcoEnchant) {
-            wrapped.targets.any { it.matches(item) }
-        } else {
-            this.canEnchantItem(item)
+        return modifiers.entries().any { (attribute, modifier) ->
+            attribute == Attribute.ARMOR && modifier.amount > 0
         }
     }
 
