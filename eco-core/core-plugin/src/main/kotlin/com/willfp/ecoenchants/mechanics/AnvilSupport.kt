@@ -4,11 +4,13 @@ import com.willfp.eco.core.fast.fast
 import com.willfp.eco.core.proxy.ProxyConstants
 import com.willfp.eco.util.StringUtils
 import com.willfp.ecoenchants.enchant.ActiveEnchants
+import com.willfp.ecoenchants.enchant.EcoEnchant
 import com.willfp.ecoenchants.enchant.EcoEnchants
 import com.willfp.ecoenchants.enchant.wrap
 import com.willfp.ecoenchants.plugin
 import org.bukkit.Material
 import org.bukkit.Tag
+import org.bukkit.enchantments.Enchantment
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
@@ -292,6 +294,16 @@ object AnvilSupport : Listener {
             return
         }
 
+        // Nothing on the book can go on this item, so there is nothing to merge: vanilla denies the
+        // pair and doMerge would only rename the item. Clearing the result here and rebuilding it a
+        // tick later used to wipe the result another plugin built for that pair (ItemAspects enchants
+        // a cosmetic head as a helmet), leaving the bare head or nothing at all. The generation is
+        // marked as rendered so the result click guard lets the take through.
+        if (isForeignBook(leftItem, rightItem)) {
+            renderedPreviewGeneration[player.uniqueId] = generation
+            return
+        }
+
         val baseRepairCost = event.view.repairCost
 
         event.result = null
@@ -389,6 +401,43 @@ object AnvilSupport : Listener {
             event.result = outItem
             event.inventory.setItem(2, outItem)
             renderedPreviewGeneration[player.uniqueId] = generation
+        }
+    }
+
+    /**
+     * Whether [right] is an enchanted book none of whose enchantments targets [left].
+     *
+     * Only the targets are read. The type limits, conflicts and enchant limit that
+     * [com.willfp.ecoenchants.enchant.EcoEnchantLike.canEnchantItem] also checks are EcoEnchants'
+     * own rules, so a book they block still goes through [doMerge] instead of falling back to
+     * vanilla. An enchantment the item already holds counts only if it targets the item: vanilla
+     * refuses to merge one that does not, and so does this.
+     */
+    private fun isForeignBook(left: ItemStack?, right: ItemStack?): Boolean {
+        if (left == null || left.type == Material.AIR || left.type == Material.ENCHANTED_BOOK) {
+            return false
+        }
+
+        if (right == null || right.type != Material.ENCHANTED_BOOK) {
+            return false
+        }
+
+        val enchants = right.fast().getEnchants(true).keys
+
+        return enchants.isNotEmpty() && enchants.none { it.isTargetOf(left) }
+    }
+
+    /**
+     * Whether [item] is among this enchantment's targets, leaving every limit aside: an EcoEnchant's
+     * configured targets, or vanilla's supported items for any other enchantment.
+     */
+    private fun Enchantment.isTargetOf(item: ItemStack): Boolean {
+        val wrapped = this.wrap()
+
+        return if (wrapped is EcoEnchant) {
+            wrapped.targets.any { it.matches(item) }
+        } else {
+            this.canEnchantItem(item)
         }
     }
 
