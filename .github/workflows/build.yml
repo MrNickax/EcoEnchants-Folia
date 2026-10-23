@@ -6,6 +6,11 @@ on:
     tags: [ '*' ]
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish packages and release
+        type: boolean
+        default: true
 
 permissions:
   contents: write   # create/update releases
@@ -41,20 +46,20 @@ jobs:
 
       # Publishes the com.willfp:EcoEnchants API artifact to GitHub Packages (for developers).
       - name: Publish to GitHub Packages
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.publish)
         run: ./gradlew publish --stacktrace
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Read version
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.publish)
         id: version
         run: echo "value=$(sed -nE 's/^version[[:space:]]*=[[:space:]]*//p' gradle.properties | head -1)" >> "$GITHUB_OUTPUT"
 
       # The libreforge gradle-plugin names the jar "<name> v<version>.jar"; use a dash instead.
       - name: Rename plugin jar (space -> dash)
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.publish)
         run: |
           cd bin
           for f in *.jar; do
@@ -64,7 +69,7 @@ jobs:
 
       # Attaches ONLY the final EcoEnchants plugin jar from bin/ to a release.
       - name: Publish jar to Releases
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.publish)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.value }}
