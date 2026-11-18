@@ -12,11 +12,26 @@ dependencies {
     }
     // Bedrock support: used only to detect Bedrock players and send native confirmation forms.
     compileOnly("org.geysermc.floodgate:api:2.2.4-SNAPSHOT")
+
+    testImplementation(kotlin("test"))
+    testImplementation(platform("org.junit:junit-bom:5.13.4"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 tasks {
     build {
         dependsOn(publishToMavenLocal)
+    }
+
+    compileTestKotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+        }
+    }
+
+    test {
+        useJUnitPlatform()
     }
 }
 

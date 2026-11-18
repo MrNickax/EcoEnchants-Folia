@@ -34,6 +34,8 @@ object EnchantDisplay : DisplayModule(plugin, DisplayPriority.HIGH) {
     private val hideStateKey =
         plugin.namespacedKeyFactory.create("ecoenchantlore-skip") // Same for backwards compatibility
 
+    private val loreAnchorKey = plugin.namespacedKeyFactory.create(LoreAnchor.KEY)
+
     private val hse = plugin.getProxy(HideStoredEnchantsProxy::class.java)
 
     override fun display(
@@ -131,7 +133,12 @@ object EnchantDisplay : DisplayModule(plugin, DisplayPriority.HIGH) {
             hse.hideStoredEnchants(fast)
         }
 
-        if (plugin.configYml.getBool("display.enchantments-below-lore")) {
+        // An item can pick its own spot for the enchantments, see LoreAnchor.
+        val anchor = pdc.get(loreAnchorKey, PersistentDataType.INTEGER)
+
+        if (anchor != null) {
+            fast.lore = LoreAnchor.place(lore, enchantLore, anchor, Display.PREFIX) + notMetLines
+        } else if (plugin.configYml.getBool("display.enchantments-below-lore")) {
             fast.lore = lore + enchantLore + notMetLines
         } else {
             fast.lore = enchantLore + lore + notMetLines
